@@ -9,7 +9,10 @@ test.test('tokenization', () => {
     '': [],
     'field\\==value': ['field=', '=', 'value'],
     'field\\= equals value': ['field=', 'EQUALS', 'value'],
-    'field\\\\= value': ['field', '=', 'value']
+    'field\\\\= value': ['field\\', '=', 'value'],
+    '\'field WITH spaces\' isnt        "value with  spaces"': ['field WITH spaces', 'ISNT', 'value with  spaces'],
+    'array_field : [value1\\ spaced , "value2"]': ['array_field', ':', '[', 'value1 spaced', ',', 'value2', ']'],
+    '1 NOtIN 2,3': ['1', 'NOTIN', '2', ',', '3']
   }
 
   for (const string in strings) {
