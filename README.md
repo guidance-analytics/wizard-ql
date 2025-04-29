@@ -1,15 +1,19 @@
-# wizard-ql
+<h2>
+  𝗪<sub>izard</sub>
+  <br />
+  𝗜<sub>s</sub>
+  <br />
+  𝗭<sub>not</sub>
+  <br />
+  𝗔<sub>n</sub>
+  <br />
+  𝗥<sub>acronym</sub>
+  <br />
+  𝗗
+  <br />
+  <br />
+  𝗤<sub>uery</sub>
+  𝗟<sub>anguage</sub>
+</h2>
 
-To install dependencies:
-
-```bash
-bun install
-```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.2.10. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+#### WizardQL is a natural-language-like query language for constructing data queries for certain resources that meet conditions.
