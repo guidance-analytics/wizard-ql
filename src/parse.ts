@@ -1,8 +1,10 @@
 import { ParseError } from './errors'
+import './polyfill/escape'
+
 /* eslint-disable @stylistic/quote-props */
-// NOTE: Longer tokens that encompass others must be first so that they are matched first in the Regex
 /** All available operation aliases */
 export const OPERATION_ALIAS_DICTIONARY = {
+// NOTE: Longer tokens that encompass others must be first so that they are matched first in the Regex
   'AND': 'AND',
   '&&': 'AND',
   '&': 'AND',
@@ -41,10 +43,17 @@ export const OPERATION_ALIAS_DICTIONARY = {
   '>': 'GREATER',
   'MORE': 'GREATER',
 
+  'NOTIN': 'NOTIN',
+  '!:': 'NOTIN',
+
   'IN': 'IN',
   ':': 'IN',
-  'NOTIN': 'NOTIN',
-  '!:': 'NOTIN'
+
+  'NOTMATCHES': 'NOTMATCHES',
+  '!~': 'NOTMATCHES',
+
+  'MATCHES': 'MATCHES',
+  '~': 'MATCHES'
 } as const
 /* eslint-enable @stylistic/quote-props */
 type Operation = (typeof OPERATION_ALIAS_DICTIONARY)[keyof typeof OPERATION_ALIAS_DICTIONARY]
@@ -60,7 +69,9 @@ const OPERATION_DICTIONARY = {
   GEQ: 'comparison',
   LEQ: 'comparison',
   IN: 'comparison',
-  NOTIN: 'comparison'
+  NOTIN: 'comparison',
+  MATCHES: 'comparison',
+  NOTMATCHES: 'comparison'
 } as const satisfies Record<Operation, 'junction' | 'comparison'>
 
 export type JunctionOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'junction'>
@@ -72,7 +83,7 @@ export interface Group {
   /** The junction operator */
   operation: JunctionOperator
   /** The members of the group */
-  constituents: Array<Group | Condition>
+  constituents: Expression[]
 }
 /** A query on a field */
 export interface Condition {
@@ -214,6 +225,40 @@ function getClosingIndex (tokens: string[], start: number, opening: string, clos
 }
 
 /**
+ * Apply De Morgan's Law to an expression and inverse it
+ * (Mutating operation)
+ * @param expression The expression
+ */
+function inverseExpression (expression: Expression): void {
+  switch (expression.type) {
+    case 'group':
+      switch (expression.operation) {
+        case 'AND': expression.operation = 'OR'; break
+        case 'OR': expression.operation = 'AND'; break
+      }
+
+      expression.constituents.forEach(inverseExpression)
+
+      break
+    case 'condition':
+      switch (expression.operation) {
+        case 'EQUAL': expression.operation = 'NOTEQUAL'; break
+        case 'NOTEQUAL': expression.operation = 'EQUAL'; break
+        case 'GEQ': expression.operation = 'LESS'; break
+        case 'LESS': expression.operation = 'GEQ'; break
+        case 'LEQ': expression.operation = 'GREATER'; break
+        case 'GREATER': expression.operation = 'LEQ'; break
+        case 'IN': expression.operation = 'NOTIN'; break
+        case 'NOTIN': expression.operation = 'IN'; break
+        case 'MATCHES': expression.operation = 'NOTMATCHES'; break
+        case 'NOTMATCHES': expression.operation = 'MATCHES'; break
+      }
+
+      break
+  }
+}
+
+/**
  * Parse tokens into an object expression
  * @param                tokens  The tokens to parse into an object expression
  * @param                _offset THe token offset
@@ -336,6 +381,29 @@ function _parse (tokens: string[], _offset: number): Expression | null {
       groupOperation = op as JunctionOperator
 
       continue
+    }
+
+    if (token === '!') {
+      const nextToken = tokens[t + 1]
+
+      if (nextToken === '(') {
+        resolveCondition(_offset + t)
+
+        const closingIndex = getClosingIndex(tokens, t + 1, '(', ')')
+        if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
+
+        const futureSubExpression = _parse(tokens.slice(t + 2, closingIndex), t + 2)
+        if (futureSubExpression) {
+          inverseExpression(futureSubExpression)
+
+          if (futureSubExpression.type === 'group' && futureSubExpression.operation === groupOperation) expressions.push(...futureSubExpression.constituents)
+          else expressions.push(futureSubExpression)
+        }
+
+        t = closingIndex
+
+        continue
+      }
     }
 
     if (!field) {

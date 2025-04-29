@@ -52,6 +52,19 @@ test('basic query', () => {
     operation: 'LESS',
     value: 8
   })
+
+  expect(parse('field matches ".*substr.*"'), 'regex').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'MATCHES',
+    value: '.*substr.*'
+  })
+  expect(parse('field !~ "f{3}"'), 'notregex').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'NOTMATCHES',
+    value: 'f{3}'
+  })
 })
 
 test('implicit boolean', () => {
@@ -324,4 +337,163 @@ test('dangling junctions', () => {
   expect(() => parse('foo^')).toThrow('Token #1: Dangling junction operator')
   expect(() => parse('V foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
   expect(() => parse('foo or')).toThrow('Token #1: Dangling junction operator')
+})
+
+test('NOT on group', () => {
+  expect(parse('foo and !(bar and baz)'), 'demorgans and').toEqual({
+    type: 'group',
+    operation: 'AND',
+    constituents: [
+      {
+        type: 'condition',
+        operation: 'EQUAL',
+        field: 'foo',
+        value: true
+      },
+      {
+        type: 'group',
+        operation: 'OR',
+        constituents: [
+          {
+            type: 'condition',
+            field: 'bar',
+            operation: 'NOTEQUAL',
+            value: true
+          },
+          {
+            type: 'condition',
+            field: 'baz',
+            operation: 'NOTEQUAL',
+            value: true
+          }
+        ]
+      }
+    ]
+  })
+
+  expect(parse('foo or !(bar or baz)'), 'demorgans or').toEqual({
+    type: 'group',
+    operation: 'OR',
+    constituents: [
+      {
+        type: 'condition',
+        operation: 'EQUAL',
+        field: 'foo',
+        value: true
+      },
+      {
+        type: 'group',
+        operation: 'AND',
+        constituents: [
+          {
+            type: 'condition',
+            field: 'bar',
+            operation: 'NOTEQUAL',
+            value: true
+          },
+          {
+            type: 'condition',
+            field: 'baz',
+            operation: 'NOTEQUAL',
+            value: true
+          }
+        ]
+      }
+    ]
+  })
+
+  expect(parse('foo or !(bar and (baz or !foobar))'), 'group merging').toEqual({
+    type: 'group',
+    operation: 'OR',
+    constituents: [
+      {
+        type: 'condition',
+        field: 'foo',
+        operation: 'EQUAL',
+        value: true
+      },
+      {
+        type: 'condition',
+        field: 'bar',
+        operation: 'NOTEQUAL',
+        value: true
+      },
+      {
+        type: 'group',
+        operation: 'AND',
+        constituents: [
+          {
+            type: 'condition',
+            field: 'baz',
+            operation: 'NOTEQUAL',
+            value: true
+          },
+          {
+            type: 'condition',
+            field: 'foobar',
+            operation: 'NOTEQUAL',
+            value: false
+          }
+        ]
+      }
+    ]
+  })
+})
+
+test('inverse operators', () => {
+  expect(parse('!(foo = string)'), 'equal').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'NOTEQUAL',
+    value: 'string'
+  })
+  expect(parse('!(foo = string)'), 'notequal').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'NOTEQUAL',
+    value: 'string'
+  })
+  expect(parse('!(foo >= 2)'), 'geq').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'LESS',
+    value: 2
+  })
+  expect(parse('!(foo <= 2)'), 'leq').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'GREATER',
+    value: 2
+  })
+  expect(parse('!(foo < 2)'), 'less').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'GEQ',
+    value: 2
+  })
+  expect(parse('!(foo > 2)'), 'equal').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'LEQ',
+    value: 2
+  })
+  expect(parse('!(foo notin [1])'), 'notin').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'IN',
+    value: [1]
+  })
+  expect(parse('!(foo ~ expression?)'), 'matches').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'NOTMATCHES',
+    value: 'expression?'
+  })
+
+  expect(parse('!(foo notmatches expression?)'), 'notmatches').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'MATCHES',
+    value: 'expression?'
+  })
 })

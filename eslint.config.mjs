@@ -122,7 +122,8 @@ export default [
         '@typescript-eslint/prefer-ts-expect-error': 'error',
         '@typescript-eslint/non-nullable-type-assertion-style': 'error',
         '@typescript-eslint/prefer-function-type': 'error',
-        '@typescript-eslint/prefer-includes': 'error'
+        '@typescript-eslint/prefer-includes': 'error',
+        '@typescript-eslint/switch-exhaustiveness-check': 'warn'
       }
     }
   ),
@@ -194,6 +195,7 @@ export default [
       }],
       'no-void': 'off',
       'import/no-anonymous-default-export': 'off',
+      'no-fallthrough': 'warn',
 
       '@stylistic/arrow-parens': ['error', 'always'],
       '@stylistic/comma-dangle': ['error', 'never'],
