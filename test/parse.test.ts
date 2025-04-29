@@ -113,7 +113,7 @@ test('escaped parsing', () => {
 
   expect(parse('\'field\' = "\\"value\\" \\"spaced\\""'), 'escaped inner quotes field').toEqual({
     type: 'condition',
-    field: '\'field\'',
+    field: 'field',
     operation: 'EQUAL',
     value: '"value" "spaced"'
   })
@@ -124,6 +124,25 @@ test('escaped parsing', () => {
     operation: 'NOTEQUAL',
     value: ['entry, 1', 'entry 2', '\\\'entry 3\\\'']
   })
+})
+
+test('invalid operands', () => {
+  expect(() => parse('"1" "2" "3"'), 'no comparison').toThrow(ParseError)
+  expect(() => parse('1 = "2 3" "4 5"'), 'too many operands').toThrow(ParseError)
+})
+
+test('unclosed scopes', () => {
+  expect(() => parse('(foo'), 'parenthesis').toThrow(ParseError)
+  expect(() => parse('(foo'), 'parenthesis').toThrow('Token #0: Missing closing parenthesis for group')
+  expect(() => parse('foo : [1'), 'bracket').toThrow(ParseError)
+  expect(() => parse('foo : [1'), 'bracket').toThrow('Token #2: Missing closing bracket/brace for array value')
+  expect(() => parse('foo : {1'), 'brace').toThrow(ParseError)
+  expect(() => parse('foo : {1'), 'brace').toThrow('Token #2: Missing closing bracket/brace for array value')
+
+  expect(() => parse(')test'), 'unopened parenthesis').toThrow(ParseError)
+  expect(() => parse(')test'), 'unopened parenthesis').toThrow('Token #0: Unexpected closing parenthesis')
+  expect(() => parse('field = ]test'), 'unopened bracket').toThrow(ParseError)
+  expect(() => parse('field = ]test'), 'unopened bracket').toThrow('Token #2: Unexpected closing bracket/brace')
 })
 
 test('groups', () => {
@@ -228,9 +247,40 @@ test('group disjunction', () => {
       },
       {
         type: 'condition',
-        field: 'field1',
+        field: 'field3',
         operation: 'EQUAL',
         value: false
+      }
+    ]
+  })
+
+  expect(parse('field1 | field2 and !field3'), 'or -> and').toEqual({
+    type: 'group',
+    operation: 'OR',
+    constituents: [
+      {
+        type: 'condition',
+        field: 'field1',
+        operation: 'EQUAL',
+        value: true
+      },
+      {
+        type: 'group',
+        operation: 'AND',
+        constituents: [
+          {
+            type: 'condition',
+            field: 'field2',
+            operation: 'EQUAL',
+            value: true
+          },
+          {
+            type: 'condition',
+            field: 'field3',
+            operation: 'EQUAL',
+            value: false
+          }
+        ]
       }
     ]
   })

@@ -217,29 +217,41 @@ function processToken (token: string): {
  * @returns                      An expression
  * @throws  {ParseError}
  */
-function _parse (tokens: string[], _offset: number): Expression | null { // TODO: Maybe do a function that "interrupts condition for early resolve"
+function _parse (tokens: string[], _offset: number): Expression | null {
   let field: Condition['field'] | undefined
   let comparisonOperation: Condition['operation'] | undefined
   let value: Condition['value'] | undefined
+  let inConjunction = false
 
   let groupOperation: JunctionOperator | undefined
   const expressions: Expression[] = []
 
   function resolveCondition (token: number, noopIfFail?: boolean): void {
+    let group: Expression[]
+    if (inConjunction) {
+      const prior = expressions.at(-1)
+      if (!prior) throw new ParseError(token, 'Unexpected: Expression list empty when parser is meant to append to an AND group')
+      if (prior.type !== 'group' || prior.operation !== 'AND') throw new ParseError(token, 'Unexpected: Last expression is not an AND group yet parser thinks it\'s appending to one')
+
+      group = prior.constituents
+    } else group = expressions
+
     if (field && comparisonOperation && value !== undefined) {
-      expressions.push({
+      group.push({
         type: 'condition',
         field,
         operation: comparisonOperation,
         value
       })
+      inConjunction = false
     } else if (field && !comparisonOperation && value === undefined) {
-      expressions.push({
+      group.push({
         type: 'condition',
         field,
         operation: 'EQUAL',
         value: true
       })
+      inConjunction = false
     } else if (field || comparisonOperation || value !== undefined) {
       if (noopIfFail) return
       else throw new ParseError(token, 'Failed to resolve condition; missing operand or operator')
@@ -257,15 +269,8 @@ function _parse (tokens: string[], _offset: number): Expression | null { // TODO
       unescaped
     } = processToken(token)
 
-    const op = OPERATION_ALIAS_DICTIONARY[token as keyof typeof OPERATION_ALIAS_DICTIONARY] as Operation | undefined
-
-    if (op && OPERATION_DICTIONARY[op] === 'junction') {
-      resolveCondition(_offset + t)
-      // TODO: check if different op (mismatch) create new group
-      groupOperation = op as JunctionOperator
-
-      continue
-    }
+    if (token === ')') throw new ParseError(_offset + t, 'Unexpected closing parenthesis')
+    if ([']', '}'].includes(token)) throw new ParseError(_offset + t, 'Unexpected closing bracket/brace')
 
     if (token === '(') {
       if (field || comparisonOperation || value) throw new ParseError(_offset + t, 'Tried to open a group during an operation')
@@ -273,15 +278,60 @@ function _parse (tokens: string[], _offset: number): Expression | null { // TODO
       const closingIndex = tokens.indexOf(')')
       if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
 
-      try {
-        const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1)
-        if (subExpression) expressions.push(subExpression)
-      } catch (err) {
-        if (err instanceof ParseError) throw new ParseError(_offset + t, 'Group parsing error')
-        throw err
-      }
+      const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1)
+      if (subExpression) expressions.push(subExpression)
 
       t = closingIndex
+      continue
+    }
+
+    const op = OPERATION_ALIAS_DICTIONARY[token as keyof typeof OPERATION_ALIAS_DICTIONARY] as Operation | undefined
+
+    if (op && OPERATION_DICTIONARY[op] === 'junction') {
+      resolveCondition(_offset + t, true)
+
+      const prior = expressions.at(-1)
+      if (!prior) throw new ParseError(_offset + t, 'Unexpected junction operator with no preceding expression')
+
+      if (groupOperation && groupOperation !== op) {
+        switch (groupOperation) {
+          case 'AND': { // assume op = OR
+            const futureSubgroup = _parse(tokens.slice(t + 1), _offset + t)
+            if (futureSubgroup === null) throw new ParseError(_offset + t, 'Dangling junction operator')
+
+            return { // End for loop here
+              type: 'group',
+              operation: 'OR',
+              constituents: [
+                {
+                  type: 'group',
+                  operation: 'AND',
+                  constituents: expressions
+                },
+                futureSubgroup
+              ]
+            }
+          }
+          case 'OR': // assume op = AND
+            inConjunction = true
+
+            if (prior.type === 'group' && prior.operation === 'AND') continue
+
+            expressions.splice(-1, 1)
+            expressions.push({
+              type: 'group',
+              operation: 'AND',
+              constituents: [
+                prior
+              ]
+            })
+
+            continue
+        }
+      }
+
+      groupOperation = op as JunctionOperator
+
       continue
     }
 
@@ -315,9 +365,9 @@ function _parse (tokens: string[], _offset: number): Expression | null { // TODO
     }
 
     if (!value) {
-      if (token === '[') {
-        const closingIndex = tokens.indexOf(']')
-        if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing bracket for array value')
+      if (token === '[' || token === '{') {
+        const closingIndex = tokens.indexOf(token === '[' ? ']' : '}')
+        if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing bracket/brace for array value')
 
         value = []
         const arrayContents = tokens.slice(t + 1, closingIndex)
@@ -356,6 +406,8 @@ function _parse (tokens: string[], _offset: number): Expression | null { // TODO
   } catch {
     throw new ParseError(_offset + tokens.length, 'Reached end of expression with an incomplete condition')
   }
+
+  if (inConjunction) throw new ParseError(_offset + tokens.length, 'Dangling junction operator')
 
   if (groupOperation) {
     return {
