@@ -1,3 +1,4 @@
+import { ParseError } from './errors'
 /* eslint-disable @stylistic/quote-props */
 // NOTE: Longer tokens that encompass others must be first so that they are matched first in the Regex
 /** All available operation aliases */
@@ -22,6 +23,7 @@ export const OPERATION_ALIAS_DICTIONARY = {
 
   'NOTEQUALS': 'NOTEQUAL',
   'NOTEQUAL': 'NOTEQUAL',
+  'NEQ': 'NOTEQUAL',
   'ISNT': 'NOTEQUAL',
   '!==': 'NOTEQUAL',
   '!=': 'NOTEQUAL',
@@ -45,7 +47,7 @@ export const OPERATION_ALIAS_DICTIONARY = {
   '!:': 'NOTIN'
 } as const
 /* eslint-enable @stylistic/quote-props */
-type OPERATION = (typeof OPERATION_ALIAS_DICTIONARY)[keyof typeof OPERATION_ALIAS_DICTIONARY]
+type Operation = (typeof OPERATION_ALIAS_DICTIONARY)[keyof typeof OPERATION_ALIAS_DICTIONARY]
 
 /** All base operations and their type */
 const OPERATION_DICTIONARY = {
@@ -59,16 +61,16 @@ const OPERATION_DICTIONARY = {
   LEQ: 'comparison',
   IN: 'comparison',
   NOTIN: 'comparison'
-} as const satisfies Record<OPERATION, 'junction' | 'comparison'>
+} as const satisfies Record<Operation, 'junction' | 'comparison'>
 
-type JUNCTION_OPERATOR = KeysWhereValue<typeof OPERATION_DICTIONARY, 'junction'>
-type COMPARISON_OPERATOR = KeysWhereValue<typeof OPERATION_DICTIONARY, 'comparison'>
+type JunctionOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'junction'>
+type ComparisonOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'comparison'>
 
 /** A group of conditions joined by a junction operator */
 export interface Group {
   type: 'group'
   /** The junction operator */
-  operation: JUNCTION_OPERATOR
+  operation: JunctionOperator
   /** The members of the group */
   constituents: Array<Group | Condition>
 }
@@ -76,18 +78,18 @@ export interface Group {
 export interface Condition {
   type: 'condition'
   /** The operation */
-  operation: COMPARISON_OPERATOR
+  operation: ComparisonOperator
   /** The name of the field */
   field: string
   /** The value being checked */
-  value: string | string[] | number | boolean
+  value: string | number | boolean | Array<string | number>
 }
 export type Expression = Group | Condition
 export interface AggregationValue {
   /** The value being checked */
   value: string
   /** The operator being used */
-  operation: COMPARISON_OPERATOR
+  operation: ComparisonOperator
   /** Is this an exclusionary operator? (Ex: NOT, NOTIN) */
   exclusionary: boolean
 }
@@ -107,7 +109,8 @@ export interface ParsedExpression {
 const ALIASES = Object.keys(OPERATION_ALIAS_DICTIONARY)
 const ESCAPE_REGEX = '(?<!(?<!\\\\)\\\\)'
 const QUOTES = ['\'', '"', '`']
-const QUOTE_REGEX = new RegExp(`^\\s*${ESCAPE_REGEX}(?:${QUOTES.map((q) => RegExp.escape(q)).join('|')})(.+)${ESCAPE_REGEX}(?:${QUOTES.map((q) => RegExp.escape(q)).join('|')})\\s*$`)
+const QUOTE_TOKEN_REGEX_STR = `${ESCAPE_REGEX}(?<quote>${QUOTES.map((q) => RegExp.escape(q)).join('|')})(?<quotecontent>.*?)${ESCAPE_REGEX}\\k<quote>`
+const QUOTE_EDGE_REGEX = new RegExp(`^${QUOTE_TOKEN_REGEX_STR}$`)
 
 /**
  * Create a Regex to find tokens
@@ -130,7 +133,7 @@ function createTokenRegex (): RegExp {
       ? `(?<=\\s)${escaped}(?=\\s)`
       : `(?<!(?<!\\\\)\\\\)${escaped}`
   })
-  const inner = `(?:${pieces.join('|')})`
+  const inner = `(?:${QUOTE_TOKEN_REGEX_STR}|${pieces.join('|')})`
 
   // const lookasides = `(?:(?=${inner})|(?<=${inner}))`
 
@@ -140,25 +143,12 @@ function createTokenRegex (): RegExp {
 const TOKEN_REGEX = createTokenRegex()
 
 /**
- * Sanitize a token by removing whitespace and escapes
- * @param string The string to sanitize
- * @returns      The sanitized string
- */
-function sanitize (string: string): string {
-  // Remove whitespace (either by parsing whats in quotes or replacing it all)
-  const trimmed = string.match(QUOTE_REGEX)?.[1] ?? string.replaceAll(/(?<!\\)\s/g, '')
-
-  // Remove escapes
-  return trimmed.replaceAll(/(?<!\\)\\/g, '')
-}
-
-/**
  * Take a string, sanitize it, and push it to an array if it has a length
  * @param array The array to push to
  * @param item  The item to sanitize and push
  */
 function pushSanitized (array: string[], item: string): void {
-  const sanitized = sanitize(item)
+  const sanitized = item.trim()
   if (sanitized) array.push(sanitized)
 }
 
@@ -175,7 +165,9 @@ export function tokenize (expression: string): string[] {
   for (const match of indices) {
     pushSanitized(tokens, expression.slice(lastMatchEnd ?? 0, match.index))
 
-    pushSanitized(tokens, match[0])
+    pushSanitized(tokens, match[0].match(QUOTE_EDGE_REGEX)
+      ? expression.slice(match.index, match.index + match[0].length) // This isn't a real token and is a string; don't append its uppercase version
+      : match[0])
     lastMatchEnd = match.index + match[0].length
   }
   pushSanitized(tokens, expression.slice(lastMatchEnd ?? 0))
@@ -184,10 +176,205 @@ export function tokenize (expression: string): string[] {
 }
 
 /**
- * Parse a Wizard expression into its object form
- * @param expression The Wizard expression
- * @returns          The object representation and a summary
+ * Parse a value as a number or a string depending on its parsability and whether its wrapped in quotes or not
+ * @param token    The token
+ * @param isQuoted Is the token quoted?
+ * @returns        The parsed token
  */
-export function parse (expression: string): Expression {
+function parseValue (token: string, isQuoted: boolean): number | string {
+  const number = parseFloat(token)
+  return isQuoted || isNaN(number) ? token : number
+}
+
+/**
+ * Process a token to get its unquoted, escaped, and unescaped varients
+ * @param token The token to process
+ * @returns     An object containing the variants
+ */
+function processToken (token: string): {
+  /** The token's quote contents, if surrounded by quotes */
+  unquoted: string | undefined
+  /** The token's resolved contents or quote contents, including escape backslashes */
+  escaped: string
+  /** The token's resolved contents, with the escape backslashes removed */
+  unescaped: string
+} {
+  const unquoted = token.match(QUOTE_EDGE_REGEX)?.groups?.quotecontent
+  const escaped = unquoted ?? token
+  const unescaped = escaped.replaceAll(/(?<!\\)\\/g, '')
+
+  return {
+    unquoted,
+    escaped,
+    unescaped
+  }
+}
+
+/**
+ * Parse tokens into an object expression
+ * @param                tokens  The tokens to parse into an object expression
+ * @param                _offset THe token offset
+ * @returns                      An expression
+ * @throws  {ParseError}
+ */
+function _parse (tokens: string[], _offset: number): Expression | null { // TODO: Maybe do a function that "interrupts condition for early resolve"
+  let field: Condition['field'] | undefined
+  let comparisonOperation: Condition['operation'] | undefined
+  let value: Condition['value'] | undefined
+
+  let groupOperation: JunctionOperator | undefined
+  const expressions: Expression[] = []
+
+  function resolveCondition (token: number, noopIfFail?: boolean): void {
+    if (field && comparisonOperation && value !== undefined) {
+      expressions.push({
+        type: 'condition',
+        field,
+        operation: comparisonOperation,
+        value
+      })
+    } else if (field && !comparisonOperation && value === undefined) {
+      expressions.push({
+        type: 'condition',
+        field,
+        operation: 'EQUAL',
+        value: true
+      })
+    } else if (field || comparisonOperation || value !== undefined) {
+      if (noopIfFail) return
+      else throw new ParseError(token, 'Failed to resolve condition; missing operand or operator')
+    }
+
+    field = undefined
+    comparisonOperation = undefined
+    value = undefined
+  }
+
+  for (let t = 0; t < tokens.length; ++t) {
+    const token = tokens[t]!
+    const {
+      unquoted,
+      unescaped
+    } = processToken(token)
+
+    const op = OPERATION_ALIAS_DICTIONARY[token as keyof typeof OPERATION_ALIAS_DICTIONARY] as Operation | undefined
+
+    if (op && OPERATION_DICTIONARY[op] === 'junction') {
+      resolveCondition(_offset + t)
+      // TODO: check if different op (mismatch) create new group
+      groupOperation = op as JunctionOperator
+
+      continue
+    }
+
+    if (token === '(') {
+      if (field || comparisonOperation || value) throw new ParseError(_offset + t, 'Tried to open a group during an operation')
+
+      const closingIndex = tokens.indexOf(')')
+      if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
+
+      try {
+        const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1)
+        if (subExpression) expressions.push(subExpression)
+      } catch (err) {
+        if (err instanceof ParseError) throw new ParseError(_offset + t, 'Group parsing error')
+        throw err
+      }
+
+      t = closingIndex
+      continue
+    }
+
+    if (!field) {
+      if (token === '!') {
+        const nextToken = tokens[++t]
+        if (!nextToken) throw new ParseError(_offset + t, 'Unexpected "!"')
+
+        resolveCondition(_offset + t)
+
+        field = processToken(nextToken).unescaped
+        comparisonOperation = 'EQUAL'
+        value = false
+
+        resolveCondition(_offset + t)
+      } else field = unescaped
+
+      continue
+    }
+
+    if (!comparisonOperation || (op && OPERATION_DICTIONARY[op] === 'comparison')) {
+      if (op && OPERATION_DICTIONARY[op] === 'comparison') comparisonOperation = op as ComparisonOperator
+      else {
+        comparisonOperation = 'EQUAL'
+        value = true
+
+        resolveCondition(_offset + t)
+      }
+
+      continue
+    }
+
+    if (!value) {
+      if (token === '[') {
+        const closingIndex = tokens.indexOf(']')
+        if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing bracket for array value')
+
+        value = []
+        const arrayContents = tokens.slice(t + 1, closingIndex)
+
+        let workingEntry = ''
+        function resolveEntry (): void {
+          const {
+            unquoted: unquotedWorkingEntry,
+            escaped: escapedWorkingEntry
+          } = processToken(workingEntry)
+
+          ;(value as Array<string | number>).push(parseValue(escapedWorkingEntry, unquotedWorkingEntry !== undefined))
+          workingEntry = ''
+        }
+
+        for (let ct = 0; ct < arrayContents.length; ++ct) {
+          const contentToken = arrayContents[ct]!
+
+          if (contentToken === ',') {
+            if (!workingEntry) throw new ParseError(_offset + t + ct, 'Unexpected blank entry in array')
+
+            resolveEntry()
+          } else workingEntry += contentToken
+        }
+        resolveEntry()
+
+        t = closingIndex
+      } else value = parseValue(unescaped, unquoted !== undefined)
+
+      resolveCondition(_offset + t)
+    }
+  }
+
+  try {
+    resolveCondition(_offset + tokens.length)
+  } catch {
+    throw new ParseError(_offset + tokens.length, 'Reached end of expression with an incomplete condition')
+  }
+
+  if (groupOperation) {
+    return {
+      type: 'group',
+      operation: groupOperation,
+      constituents: expressions
+    }
+  } else if (expressions.length > 1) throw new ParseError(_offset, 'Group possesses multiple conditions without disjunctive operators')
+  else return expressions[0] ?? null
+}
+
+/**
+ * Parse a Wizard expression into its object form
+ * @param                        expression The Wizard expression
+ * @returns                                 The object representation and a summary
+ * @throws  {ParseError | Error}            A parsing error
+ */
+export function parse (expression: string): Expression | null {
   const tokens = tokenize(expression)
+
+  return _parse(tokens, 0)
 }
