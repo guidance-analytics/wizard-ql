@@ -191,6 +191,29 @@ function processToken (token: string): {
 }
 
 /**
+ * Get an opening closure's closing index
+ * @param tokens  The token array
+ * @param start   The index of the opening closure
+ * @param opening The token to consider as opening
+ * @param closing The token to consider as closing
+ * @returns       The index of the closing token or -1 if not found
+ */
+function getClosingIndex (tokens: string[], start: number, opening: string, closing: string): number {
+  let openingCount = 1
+
+  for (let index = start + 1; index < tokens.length; ++index) {
+    switch (tokens[index]!) {
+      case opening: ++openingCount; break
+      case closing: --openingCount; break
+    }
+
+    if (openingCount === 0) return index
+  }
+
+  return -1
+}
+
+/**
  * Parse tokens into an object expression
  * @param                tokens  The tokens to parse into an object expression
  * @param                _offset THe token offset
@@ -255,7 +278,7 @@ function _parse (tokens: string[], _offset: number): Expression | null {
     if (token === '(') {
       if (field || comparisonOperation || value) throw new ParseError(_offset + t, 'Tried to open a group during an operation')
 
-      const closingIndex = tokens.indexOf(')')
+      const closingIndex = getClosingIndex(tokens, t, '(', ')')
       if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
 
       const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1)
@@ -345,8 +368,8 @@ function _parse (tokens: string[], _offset: number): Expression | null {
     }
 
     if (!value) {
-      if (token === '[' || token === '{') {
-        const closingIndex = tokens.indexOf(token === '[' ? ']' : '}')
+      if (['[', '{'].includes(token)) {
+        const closingIndex = getClosingIndex(tokens, t, token, token === '[' ? ']' : '}')
         if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing bracket/brace for array value')
 
         value = []

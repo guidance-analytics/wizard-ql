@@ -131,7 +131,7 @@ test('invalid operands', () => {
   expect(() => parse('1 = "2 3" "4 5"'), 'too many operands').toThrow(ParseError)
 })
 
-test('unclosed scopes', () => {
+test('unclosed closures', () => {
   expect(() => parse('(foo'), 'parenthesis').toThrow(ParseError)
   expect(() => parse('(foo'), 'parenthesis').toThrow('Token #0: Missing closing parenthesis for group')
   expect(() => parse('foo : [1'), 'bracket').toThrow(ParseError)
@@ -143,6 +143,39 @@ test('unclosed scopes', () => {
   expect(() => parse(')test'), 'unopened parenthesis').toThrow('Token #0: Unexpected closing parenthesis')
   expect(() => parse('field = ]test'), 'unopened bracket').toThrow(ParseError)
   expect(() => parse('field = ]test'), 'unopened bracket').toThrow('Token #2: Unexpected closing bracket/brace')
+})
+
+test('closure hell', () => {
+  expect(parse('(((foo)) | (bar)) & (baz)')).toEqual({
+    type: 'group',
+    operation: 'AND',
+    constituents: [
+      {
+        type: 'group',
+        operation: 'OR',
+        constituents: [
+          {
+            type: 'condition',
+            field: 'foo',
+            operation: 'EQUAL',
+            value: true
+          },
+          {
+            type: 'condition',
+            field: 'bar',
+            operation: 'EQUAL',
+            value: true
+          }
+        ]
+      },
+      {
+        type: 'condition',
+        field: 'baz',
+        operation: 'EQUAL',
+        value: true
+      }
+    ]
+  })
 })
 
 test('groups', () => {
@@ -254,13 +287,13 @@ test('group disjunction', () => {
     ]
   })
 
-  expect(parse('field1 | field2 and !field3'), 'or -> and').toEqual({
+  expect(parse('vfield1 | field2 and !field3'), 'or -> and').toEqual({
     type: 'group',
     operation: 'OR',
     constituents: [
       {
         type: 'condition',
-        field: 'field1',
+        field: 'vfield1',
         operation: 'EQUAL',
         value: true
       },
@@ -289,6 +322,6 @@ test('group disjunction', () => {
 test('dangling junctions', () => {
   expect(() => parse('^ foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
   expect(() => parse('foo^')).toThrow('Token #1: Dangling junction operator')
-  expect(() => parse('|foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
+  expect(() => parse('V foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
   expect(() => parse('foo or')).toThrow('Token #1: Dangling junction operator')
 })
