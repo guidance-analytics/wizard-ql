@@ -285,3 +285,10 @@ test('group disjunction', () => {
     ]
   })
 })
+
+test('dangling junctions', () => {
+  expect(() => parse('^ foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
+  expect(() => parse('foo^')).toThrow('Token #1: Dangling junction operator')
+  expect(() => parse('|foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
+  expect(() => parse('foo or')).toThrow('Token #1: Dangling junction operator')
+})

@@ -63,8 +63,8 @@ const OPERATION_DICTIONARY = {
   NOTIN: 'comparison'
 } as const satisfies Record<Operation, 'junction' | 'comparison'>
 
-type JunctionOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'junction'>
-type ComparisonOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'comparison'>
+export type JunctionOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'junction'>
+export type ComparisonOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'comparison'>
 
 /** A group of conditions joined by a junction operator */
 export interface Group {
@@ -85,26 +85,6 @@ export interface Condition {
   value: string | number | boolean | Array<string | number>
 }
 export type Expression = Group | Condition
-export interface AggregationValue {
-  /** The value being checked */
-  value: string
-  /** The operator being used */
-  operation: ComparisonOperator
-  /** Is this an exclusionary operator? (Ex: NOT, NOTIN) */
-  exclusionary: boolean
-}
-export interface FieldAggregation {
-  /** The field being query */
-  field: string
-  /** The values being checked against */
-  values: AggregationValue[]
-}
-export interface ParsedExpression {
-  /** The parsed expression */
-  expression: Expression
-  /** A summary of all fields being queried */
-  summary: FieldAggregation
-}
 
 const ALIASES = Object.keys(OPERATION_ALIAS_DICTIONARY)
 const ESCAPE_REGEX = '(?<!(?<!\\\\)\\\\)'
@@ -130,7 +110,7 @@ function createTokenRegex (): RegExp {
     const escaped = RegExp.escape(alias)
 
     return isAlpha
-      ? `(?<=\\s)${escaped}(?=\\s)`
+      ? `(?<=\\s|^)${escaped}(?=\\s|$)`
       : `(?<!(?<!\\\\)\\\\)${escaped}`
   })
   const inner = `(?:${QUOTE_TOKEN_REGEX_STR}|${pieces.join('|')})`
@@ -402,14 +382,16 @@ function _parse (tokens: string[], _offset: number): Expression | null {
   }
 
   try {
-    resolveCondition(_offset + tokens.length)
+    resolveCondition(_offset + tokens.length - 1)
   } catch {
-    throw new ParseError(_offset + tokens.length, 'Reached end of expression with an incomplete condition')
+    throw new ParseError(_offset + tokens.length - 1, 'Reached end of expression with an incomplete condition')
   }
 
-  if (inConjunction) throw new ParseError(_offset + tokens.length, 'Dangling junction operator')
+  if (inConjunction) throw new ParseError(_offset + tokens.length - 1, 'Dangling junction operator')
 
   if (groupOperation) {
+    if (expressions.length === 1) throw new ParseError(_offset + tokens.length - 1, 'Dangling junction operator')
+
     return {
       type: 'group',
       operation: groupOperation,
@@ -422,7 +404,7 @@ function _parse (tokens: string[], _offset: number): Expression | null {
 /**
  * Parse a Wizard expression into its object form
  * @param                        expression The Wizard expression
- * @returns                                 The object representation and a summary
+ * @returns                                 The object representation
  * @throws  {ParseError | Error}            A parsing error
  */
 export function parse (expression: string): Expression | null {
