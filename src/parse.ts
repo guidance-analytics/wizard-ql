@@ -255,9 +255,9 @@ export function tokenize (expression: string): string[] {
  * @param isQuoted Is the token quoted?
  * @returns        The parsed token
  */
-function parseValue (token: string, isQuoted: boolean): number | string {
+function parseValue (token: string, isQuoted: boolean): boolean | number | string {
   const number = parseFloat(token)
-  return isQuoted || isNaN(number) ? token : number
+  return isQuoted || isNaN(number) ? token === 'true' ? true : token === 'false' ? false : token : number
 }
 
 /**
@@ -347,6 +347,7 @@ interface ExpressionConstraints<T extends TypeRecord> {
    * Restrict an entire field by setting it to true.
    * Restrict a collection of values from a field by passing an array of restricted values.
    * If the field query is of array type, it will check all entries of the array.
+   * @warn If 42 (the number) is prohibited, "42" the string will still be allowed
    */
   restricted?: Partial<Record<keyof T | (string & {}), boolean | Array<boolean | string | number | RegExp>>>
 
@@ -374,7 +375,7 @@ interface ExpressionConstraints<T extends TypeRecord> {
  * @throws  {ConstraintError}
  * @returns                               The same reference to the condition
  */
-function validateCondition<T extends TypeRecord> (token: number, condition: Omit<UncheckedCondition, 'validated'>, constraints?: ExpressionConstraints<T>): UncheckedConditionSpread | CheckedConditionSpread<ConvertTypeRecord<T>> {
+function validateCondition<T extends TypeRecord> (token: number, condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T> | undefined): UncheckedConditionSpread | CheckedConditionSpread<ConvertTypeRecord<T>> {
   let validated = false
   const restriction = constraints?.restricted?.[condition.field]
 
@@ -473,7 +474,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
         field,
         operation: comparisonOperation,
         value
-      }))
+      }, constraints))
       inConjunction = false
     } else if (field && !comparisonOperation && value === undefined) {
       group.push(validateCondition(token, {
@@ -481,7 +482,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
         field,
         operation: 'EQUAL',
         value: true
-      }))
+      }, constraints))
       inConjunction = false
     } else if (field || comparisonOperation || value !== undefined) {
       if (noopIfFail) return
@@ -637,7 +638,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
           } = processToken(workingEntry)
 
           if (workingEntry) {
-            (value as Array<string | number>).push(parseValue(escapedWorkingEntry, unquotedWorkingEntry !== undefined))
+            (value as Primitive[]).push(parseValue(escapedWorkingEntry, unquotedWorkingEntry !== undefined))
             workingEntry = ''
           }
         }
@@ -664,8 +665,9 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
 
   try {
     resolveCondition(_offset + tokens.length - 1)
-  } catch {
-    throw new ParseError(_offset + tokens.length - 1, 'Reached end of expression with an incomplete condition')
+  } catch (err) {
+    if (err instanceof ParseError) throw new ParseError(_offset + tokens.length - 1, 'Reached end of expression with an incomplete condition')
+    else throw err
   }
 
   if (inConjunction) throw new ParseError(_offset + tokens.length - 1, 'Dangling junction operator')

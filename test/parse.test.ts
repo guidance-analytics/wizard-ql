@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test'
 
-import { OPERATION_ALIAS_DICTIONARY, tokenize, parse } from '../src/parse'
-import { ParseError } from '../src/errors'
+import { OPERATION_ALIAS_DICTIONARY, tokenize, parse, type ComparisonOperation } from '../src/parse'
+import { ConstraintError, ParseError } from '../src/errors'
 
 test('tokenization', () => {
   const strings = {
@@ -626,4 +626,136 @@ test('complement operators', () => {
     value: 'expression?',
     validated: false
   })
+})
+
+test('operation constraints', () => {
+  const tests: Array<[ComparisonOperation, string]> = [
+    ['EQUAL', '[entry]'],
+    ['NOTEQUAL', '[entry1, entry2]'],
+    ['GEQ', 'string'],
+    ['GREATER', 'true'],
+    ['LEQ', 'foo'],
+    ['LESS', 'false'],
+    ['IN', 'string'],
+    ['NOTIN', '42'],
+    ['MATCHES', '[1, 2]'],
+    ['NOTMATCHES', '12']
+  ]
+
+  for (const [op, value] of tests) expect(() => parse(`field ${op} ${value}`), op).toThrow(ConstraintError)
+})
+
+test('type constraints', () => {
+  expect(() => parse('foo = string', {
+    types: {
+      foo: 'string'
+    }
+  }), 'allowed single value').not.toThrow()
+  expect(parse('foo = string', {
+    types: {
+      foo: 'string'
+    }
+  }), 'validated field set').toEqual({
+    type: 'condition',
+    field: 'foo',
+    operation: 'EQUAL',
+    value: 'string',
+    validated: true
+  })
+  expect(() => parse('foo = 42', {
+    types: {
+      foo: 'string'
+    }
+  }), 'prohibited single value').toThrow(ConstraintError)
+  expect(() => parse('foo in [string, 10, entry, 8]', {
+    types: {
+      foo: ['string', 'number']
+    }
+  }), 'allowed mixed multiple values').not.toThrow()
+  expect(() => parse('foo = bar', {
+    types: {
+      foo: ['string', 'number']
+    }
+  }), 'allowed mixed single value').not.toThrow()
+  expect(() => parse('foo in [string, 10, true, 8]', {
+    types: {
+      foo: ['string', 'number']
+    }
+  }), 'prohibited mixed multiple values').toThrow(ConstraintError)
+  expect(() => parse('foo', {
+    types: {
+      foo: ['string', 'number']
+    }
+  }), 'prohibited mixed single value').toThrow(ConstraintError)
+
+  expect(() => parse('bar and fIeLD in [1, 2, peanut butter, 4]', {
+    types: {
+      field: ['number', 'boolean']
+    },
+    caseInsensitive: true
+  }), 'prohibited case insensitivity').toThrow(ConstraintError)
+
+  expect(parse('fIeLD in [1, 2, peanut butter, 4]', {
+    types: {
+      field: ['string', 'number']
+    },
+    caseInsensitive: true
+  }), 'allowed case insensitivity').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'IN',
+    value: [1, 2, 'peanut butter', 4],
+    validated: true
+  })
+})
+
+test('restriction constraints', () => {
+  expect(() => parse('(foo = bar and baz = foobar) or restricted', {
+    restricted: {
+      restricted: true
+    }
+  }), 'total restriction').toThrow(ConstraintError)
+
+  expect(() => parse('(foo = bar and baz = foobar) or "RESTRICTED"', {
+    restricted: {
+      restricted: true
+    },
+    caseInsensitive: true
+  }), 'case insensitivity and quotes').toThrow(ConstraintError)
+
+  expect(() => parse('field = allowed || field = string', {
+    restricted: {
+      field: ['string']
+    }
+  }), 'prohibited value restriction').toThrow(ConstraintError)
+
+  expect(() => parse('field = allowed', {
+    restricted: {
+      field: ['string']
+    }
+  }), 'allowed value restriction').not.toThrow()
+
+  expect(() => parse('array in [1, 2, cow, null, true]', {
+    restricted: {
+      array: ['null']
+    }
+  }), 'prohibited array checking').toThrow(ConstraintError)
+
+  expect(() => parse('array in [1, 2, cow, true]', {
+    restricted: {
+      array: ['null']
+    }
+  }), 'allowed array checking').not.toThrow()
+
+  expect(() => parse('plural in [cows, dogs, cats, pigs]', {
+    restricted: {
+      plural: [/[^s]$/]
+    }
+  }), 'allowed regexing').not.toThrow()
+
+  expect(() => parse('plural in [cows, dogs, cat, pigs]', {
+    restricted: {
+      plural: [/[^s]$/]
+    }
+  }), 'prohibited regexing').toThrow(ConstraintError)
 })
