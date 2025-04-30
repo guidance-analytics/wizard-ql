@@ -56,10 +56,11 @@ export const OPERATION_ALIAS_DICTIONARY = {
   '~': 'MATCHES'
 } as const
 /* eslint-enable @stylistic/quote-props */
-type Operation = (typeof OPERATION_ALIAS_DICTIONARY)[keyof typeof OPERATION_ALIAS_DICTIONARY]
+
+export type Operation = (typeof OPERATION_ALIAS_DICTIONARY)[keyof typeof OPERATION_ALIAS_DICTIONARY]
 
 /** All base operations and their type */
-const OPERATION_PURPOSE_DICTIONARY = {
+export const OPERATION_PURPOSE_DICTIONARY = {
   AND: 'junction',
   OR: 'junction',
   EQUAL: 'comparison',
@@ -74,12 +75,12 @@ const OPERATION_PURPOSE_DICTIONARY = {
   NOTMATCHES: 'comparison'
 } as const satisfies Record<Operation, 'junction' | 'comparison'>
 
-export type JunctionOperator = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'junction'>
-export type ComparisonOperator = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'comparison'>
+export type JunctionOperation = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'junction'>
+export type ComparisonOperation = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'comparison'>
 
-type OperationType = 'primitive' | 'boolean' | 'string' | 'number' | 'array'
+type ComparisonValueType = 'primitive' | 'boolean' | 'string' | 'number' | 'array'
 /** All comparison operations and their types */
-const COMPARISON_TYPE_DICTIONARY = {
+export const COMPARISON_TYPE_DICTIONARY = {
   EQUAL: 'primitive',
   NOTEQUAL: 'primitive',
   GEQ: 'number',
@@ -90,8 +91,9 @@ const COMPARISON_TYPE_DICTIONARY = {
   NOTIN: 'array',
   MATCHES: 'string',
   NOTMATCHES: 'string'
-} as const satisfies Record<ComparisonOperator, OperationType>
-export type OperationTypeToTSType<T extends keyof typeof COMPARISON_TYPE_DICTIONARY> = {
+} as const satisfies Record<ComparisonOperation, ComparisonValueType>
+/** Convert an operation's comparison type to a language server type */
+export type ComparisonTypeToTSType<T extends keyof typeof COMPARISON_TYPE_DICTIONARY> = {
   primitive: Primitive
   boolean: boolean
   string: string
@@ -102,14 +104,16 @@ export type OperationTypeToTSType<T extends keyof typeof COMPARISON_TYPE_DICTION
 type FieldType = 'boolean' | 'string' | 'number'
 type TypeRecord = Record<string, FieldType | FieldType[]>
 
+/** Convert a field type string to a language server type */
 type FieldTypeToTSType<T extends FieldType> = {
   boolean: boolean
   string: string
   number: number
 }[T]
+/** Primitive values that can be used in comparisons */
 export type Primitive = FieldTypeToTSType<FieldType>
 /** Convert input type record to language server type record */
-type CrystallizeTypeRecord<T extends TypeRecord> = {
+type ConvertTypeRecord<T extends TypeRecord> = {
   [K in keyof T]: (T[K] extends FieldType[] ? FieldTypeToTSType<T[K][number]> : T[K] extends FieldType ? FieldTypeToTSType<T[K]> : Primitive) & Primitive
 }
 
@@ -120,42 +124,61 @@ type CrystallizeTypeRecord<T extends TypeRecord> = {
 export interface Group<R extends Record<string, Primitive> = Record<string, Primitive>> {
   type: 'group'
   /** The junction operator */
-  operation: JunctionOperator
+  operation: JunctionOperation
   /** The members of the group */
   constituents: Array<Expression<R>>
 }
 /**
- * A query on a field
+ * A query on a field, validated by type constraints
  * @template R A record mapping field names to values
  * @template F The name of the field being queried
  */
-export interface Condition<R extends Record<string, Primitive>, F extends keyof R, O extends ComparisonOperator> {
+export interface Condition<R extends Record<string, Primitive>, F extends keyof R, O extends ComparisonOperation> {
   type: 'condition'
   /** The operation */
   operation: O
   /** The name of the field */
   field: F
   /** The value being checked */
-  value: typeof COMPARISON_TYPE_DICTIONARY[O] extends 'array' ? Array<R[F]> : R[F] & OperationTypeToTSType<O>
+  value: typeof COMPARISON_TYPE_DICTIONARY[O] extends 'array' ? Array<R[F]> : R[F] & ComparisonTypeToTSType<O>
   /** Was this condition validated by the constraints or is its type unknown? */
   validated: true
 }
-export interface UncheckedCondition<O extends ComparisonOperator = ComparisonOperator> {
+/**
+ * A query on a field
+ */
+export interface UncheckedCondition<O extends ComparisonOperation = ComparisonOperation> {
   type: 'condition'
   /** The operation */
   operation: O
   /** The name of the field */
   field: string
   /** The value being checked */
-  value: OperationTypeToTSType<O>
+  value: ComparisonTypeToTSType<O>
   /** Was this condition validated by the constraints or is its type unknown? */
   validated: false
 }
-type ConditionSpread<R extends Record<string, Primitive>> = {
-  [K in keyof R]: Condition<R, K, ComparisonOperator>
+/**
+ * Reverse the keys and values of a type and aggregate by common value
+ */
+type ReverseAggregate<T extends Record<any, any>> = {
+  [V in T[keyof T]]: {
+    [K in keyof T]: T[K] extends V ? K : never
+  }[keyof T]
+}
+type ReverseAggregatedTypes = ReverseAggregate<typeof COMPARISON_TYPE_DICTIONARY>
+/** Create a union of conditions; an intersection of the operation type validation and constraint type validation */
+type CheckedConditionSpread<R extends Record<string, Primitive>> = {
+  [K in keyof R]: {
+    [O in keyof ReverseAggregatedTypes]: Condition<R, K, ReverseAggregatedTypes[O]>
+  }[keyof ReverseAggregatedTypes]
 }[keyof R]
+/** Create a union of conditions that are operation type validated */
+type UncheckedConditionSpread = {
+  [O in keyof ReverseAggregatedTypes]: UncheckedCondition<ReverseAggregatedTypes[O]>
+}[keyof ReverseAggregatedTypes]
 
-export type Expression<R extends Record<string, Primitive> = Record<string, Primitive>> = Group<R> | ConditionSpread<R> | UncheckedCondition
+export type Expression<R extends Record<string, Primitive> = Record<string, Primitive>> = Group<R> | CheckedConditionSpread<R> | UncheckedConditionSpread
 
 const ALIASES = Object.keys(OPERATION_ALIAS_DICTIONARY)
 const ESCAPE_REGEX = '(?<!(?<!\\\\)\\\\)'
@@ -351,7 +374,7 @@ interface ExpressionConstraints<T extends TypeRecord> {
  * @throws  {ConstraintError}
  * @returns                               The same reference to the condition
  */
-function validateCondition<T extends TypeRecord> (token: number, condition: Omit<UncheckedCondition, 'validated'>, constraints?: ExpressionConstraints<T>): Expression<CrystallizeTypeRecord<T>> & { type: 'condition' } {
+function validateCondition<T extends TypeRecord> (token: number, condition: Omit<UncheckedCondition, 'validated'>, constraints?: ExpressionConstraints<T>): UncheckedConditionSpread | CheckedConditionSpread<ConvertTypeRecord<T>> {
   let validated = false
   const restriction = constraints?.restricted?.[condition.field]
 
@@ -398,9 +421,11 @@ function validateCondition<T extends TypeRecord> (token: number, condition: Omit
     }))
 
     if (!meets) throw new ConstraintError(token, `Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${types.join(', ')}`)
+
+    validated = true
   }
 
-  const edit = condition as Expression<CrystallizeTypeRecord<T>> & { type: 'condition' }
+  const edit = condition as UncheckedConditionSpread | CheckedConditionSpread<ConvertTypeRecord<T>>
   edit.validated = validated
   return edit
 }
@@ -414,14 +439,14 @@ function validateCondition<T extends TypeRecord> (token: number, condition: Omit
  * @returns                                            An expression
  * @throws  {ParseError | ConstraintError}
  */
-function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, constraints?: ExpressionConstraints<T>): Expression<CrystallizeTypeRecord<T>> | null {
-  type TypedExpression = Expression<CrystallizeTypeRecord<T>>
+function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, constraints?: ExpressionConstraints<T>): Expression<ConvertTypeRecord<T>> | null {
+  type TypedExpression = Expression<ConvertTypeRecord<T>>
   let field: string | undefined
-  let comparisonOperation: ComparisonOperator | undefined
+  let comparisonOperation: ComparisonOperation | undefined
   let value: Primitive | Primitive[] | undefined
   let inConjunction = false
 
-  let groupOperation: JunctionOperator | undefined
+  let groupOperation: JunctionOperation | undefined
   const expressions: TypedExpression[] = []
 
   /**
@@ -536,7 +561,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
         }
       }
 
-      groupOperation = op as JunctionOperator
+      groupOperation = op as JunctionOperation
 
       continue
     }
@@ -582,7 +607,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
     }
 
     if (!comparisonOperation || (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison')) {
-      if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison') comparisonOperation = op as ComparisonOperator
+      if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison') comparisonOperation = op as ComparisonOperation
       else {
         comparisonOperation = 'EQUAL'
         value = true
@@ -658,7 +683,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
  * @returns                                            The object representation
  * @throws  {ParseError | ConstraintError}
  */
-export function parse<const T extends TypeRecord> (expression: string, constraints?: ExpressionConstraints<T>): Expression<CrystallizeTypeRecord<T>> | null {
+export function parse<const T extends TypeRecord> (expression: string, constraints?: ExpressionConstraints<T>): Expression<ConvertTypeRecord<T>> | null {
   const tokens = tokenize(expression)
 
   return _parse(tokens, 0, constraints)
