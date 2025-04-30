@@ -330,6 +330,41 @@ test('groups', () => {
       }
     ]
   })
+
+  expect(parse('((a and (b) and (c and d)))'), 'simplification').toEqual({
+    type: 'group',
+    operation: 'AND',
+    constituents: [
+      {
+        type: 'condition',
+        field: 'a',
+        operation: 'EQUAL',
+        value: true,
+        validated: false
+      },
+      {
+        type: 'condition',
+        field: 'b',
+        operation: 'EQUAL',
+        value: true,
+        validated: false
+      },
+      {
+        type: 'condition',
+        field: 'c',
+        operation: 'EQUAL',
+        value: true,
+        validated: false
+      },
+      {
+        type: 'condition',
+        field: 'd',
+        operation: 'EQUAL',
+        value: true,
+        validated: false
+      }
+    ]
+  })
 })
 
 test('basic parsing errors', () => {

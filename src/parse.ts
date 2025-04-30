@@ -510,7 +510,10 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
       if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
 
       const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1, constraints)
-      if (subExpression) expressions.push(subExpression)
+      if (subExpression) {
+        if (subExpression.type === 'group' && subExpression.operation === groupOperation) expressions.push(...subExpression.constituents)
+        else expressions.push(subExpression)
+      }
 
       t = closingIndex
       continue
