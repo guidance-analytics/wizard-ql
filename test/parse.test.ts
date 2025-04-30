@@ -164,6 +164,9 @@ test('escaped parsing', () => {
 test('invalid operands', () => {
   expect(() => parse('"1" "2" "3"'), 'no comparison').toThrow(ParseError)
   expect(() => parse('1 = "2 3" "4 5"'), 'too many operands').toThrow(ParseError)
+  expect(() => parse('field in []'), 'no array entries').toThrow(ParseError)
+  expect(() => parse('field in []'), 'no array entries').toThrow('Token #3: Empty array provided as value')
+  expect(() => parse('[entry] = bar'), 'array as field').toThrow(ParseError)
 })
 
 test('unclosed closures', () => {

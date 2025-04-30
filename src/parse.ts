@@ -633,8 +633,10 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
             escaped: escapedWorkingEntry
           } = processToken(workingEntry)
 
-          ;(value as Array<string | number>).push(parseValue(escapedWorkingEntry, unquotedWorkingEntry !== undefined))
-          workingEntry = ''
+          if (workingEntry) {
+            (value as Array<string | number>).push(parseValue(escapedWorkingEntry, unquotedWorkingEntry !== undefined))
+            workingEntry = ''
+          }
         }
 
         for (let ct = 0; ct < arrayContents.length; ++ct) {
@@ -649,6 +651,8 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
         resolveEntry()
 
         t = closingIndex
+
+        if (!value.length) throw new ParseError(_offset + t, 'Empty array provided as value')
       } else value = parseValue(unescaped, unquoted !== undefined)
 
       resolveCondition(_offset + t)
