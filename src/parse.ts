@@ -1,8 +1,8 @@
-import { ParseError } from './errors'
+import { ConstraintError, ParseError } from './errors'
 import './polyfill/escape'
 
 /* eslint-disable @stylistic/quote-props */
-/** All available operation aliases */
+/** All available operation aliases (alias -> operation) */
 export const OPERATION_ALIAS_DICTIONARY = {
 // NOTE: Longer tokens that encompass others must be first so that they are matched first in the Regex
   'AND': 'AND',
@@ -59,7 +59,7 @@ export const OPERATION_ALIAS_DICTIONARY = {
 type Operation = (typeof OPERATION_ALIAS_DICTIONARY)[keyof typeof OPERATION_ALIAS_DICTIONARY]
 
 /** All base operations and their type */
-const OPERATION_DICTIONARY = {
+const OPERATION_PURPOSE_DICTIONARY = {
   AND: 'junction',
   OR: 'junction',
   EQUAL: 'comparison',
@@ -74,28 +74,88 @@ const OPERATION_DICTIONARY = {
   NOTMATCHES: 'comparison'
 } as const satisfies Record<Operation, 'junction' | 'comparison'>
 
-export type JunctionOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'junction'>
-export type ComparisonOperator = KeysWhereValue<typeof OPERATION_DICTIONARY, 'comparison'>
+export type JunctionOperator = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'junction'>
+export type ComparisonOperator = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'comparison'>
 
-/** A group of conditions joined by a junction operator */
-export interface Group {
+type OperationType = 'primitive' | 'boolean' | 'string' | 'number' | 'array'
+/** All comparison operations and their types */
+const COMPARISON_TYPE_DICTIONARY = {
+  EQUAL: 'primitive',
+  NOTEQUAL: 'primitive',
+  GEQ: 'number',
+  GREATER: 'number',
+  LEQ: 'number',
+  LESS: 'number',
+  IN: 'array',
+  NOTIN: 'array',
+  MATCHES: 'string',
+  NOTMATCHES: 'string'
+} as const satisfies Record<ComparisonOperator, OperationType>
+export type OperationTypeToTSType<T extends keyof typeof COMPARISON_TYPE_DICTIONARY> = {
+  primitive: Primitive
+  boolean: boolean
+  string: string
+  number: number
+  array: Primitive[]
+}[typeof COMPARISON_TYPE_DICTIONARY[T]]
+
+type FieldType = 'boolean' | 'string' | 'number'
+type TypeRecord = Record<string, FieldType | FieldType[]>
+
+type FieldTypeToTSType<T extends FieldType> = {
+  boolean: boolean
+  string: string
+  number: number
+}[T]
+export type Primitive = FieldTypeToTSType<FieldType>
+/** Convert input type record to language server type record */
+type CrystallizeTypeRecord<T extends TypeRecord> = {
+  [K in keyof T]: (T[K] extends FieldType[] ? FieldTypeToTSType<T[K][number]> : T[K] extends FieldType ? FieldTypeToTSType<T[K]> : Primitive) & Primitive
+}
+
+/**
+ * A group of conditions joined by a junction operator
+ * @template R A record mapping field names to values
+ */
+export interface Group<R extends Record<string, Primitive> = Record<string, Primitive>> {
   type: 'group'
   /** The junction operator */
   operation: JunctionOperator
   /** The members of the group */
-  constituents: Expression[]
+  constituents: Array<Expression<R>>
 }
-/** A query on a field */
-export interface Condition {
+/**
+ * A query on a field
+ * @template R A record mapping field names to values
+ * @template F The name of the field being queried
+ */
+export interface Condition<R extends Record<string, Primitive>, F extends keyof R, O extends ComparisonOperator> {
   type: 'condition'
   /** The operation */
-  operation: ComparisonOperator
+  operation: O
+  /** The name of the field */
+  field: F
+  /** The value being checked */
+  value: typeof COMPARISON_TYPE_DICTIONARY[O] extends 'array' ? Array<R[F]> : R[F] & OperationTypeToTSType<O>
+  /** Was this condition validated by the constraints or is its type unknown? */
+  validated: true
+}
+export interface UncheckedCondition<O extends ComparisonOperator = ComparisonOperator> {
+  type: 'condition'
+  /** The operation */
+  operation: O
   /** The name of the field */
   field: string
   /** The value being checked */
-  value: string | number | boolean | Array<string | number>
+  value: OperationTypeToTSType<O>
+  /** Was this condition validated by the constraints or is its type unknown? */
+  validated: false
 }
-export type Expression = Group | Condition
+type ConditionSpread<R extends Record<string, Primitive>> = {
+  [K in keyof R]: Condition<R, K, ComparisonOperator>
+}[keyof R]
+
+export type Expression<R extends Record<string, Primitive> = Record<string, Primitive>> = Group<R> | ConditionSpread<R> | UncheckedCondition
 
 const ALIASES = Object.keys(OPERATION_ALIAS_DICTIONARY)
 const ESCAPE_REGEX = '(?<!(?<!\\\\)\\\\)'
@@ -225,11 +285,11 @@ function getClosingIndex (tokens: string[], start: number, opening: string, clos
 }
 
 /**
- * Apply De Morgan's Law to an expression and inverse it
+ * Apply De Morgan's Law to an expression and complement it
  * (Mutating operation)
  * @param expression The expression
  */
-function inverseExpression (expression: Expression): void {
+function complementExpression<R extends Record<string, Primitive>> (expression: Expression<R>): void {
   switch (expression.type) {
     case 'group':
       switch (expression.operation) {
@@ -237,7 +297,7 @@ function inverseExpression (expression: Expression): void {
         case 'OR': expression.operation = 'AND'; break
       }
 
-      expression.constituents.forEach(inverseExpression)
+      expression.constituents.forEach(complementExpression)
 
       break
     case 'condition':
@@ -258,24 +318,122 @@ function inverseExpression (expression: Expression): void {
   }
 }
 
+interface ExpressionConstraints<T extends TypeRecord> {
+  /**
+   * Restricted fields.
+   * Restrict an entire field by setting it to true.
+   * Restrict a collection of values from a field by passing an array of restricted values.
+   * If the field query is of array type, it will check all entries of the array.
+   */
+  restricted?: Partial<Record<keyof T | (string & {}), boolean | Array<boolean | string | number | RegExp>>>
+
+  /**
+   * Restriction checks and type checks are case insensitive
+   * @note If this is enabled, the keys in the restricted record and type record must be all lowercase
+   * @note Future, if enabled, all field will be returned as lowercase
+   */
+  caseInsensitive?: boolean
+
+  /**
+   * The types of fields
+   * Either provide the field type singularly or permit multiple types with an array of field types
+   */
+  types?: T
+}
+
+/**
+ * Validate that a condition meets constraints
+ * This operation mutates the condition to apply the validated field
+ * @template T A type record, mapping field names to their types
+ * @param                     token       The token index
+ * @param                     condition   The condition to validate
+ * @param                     constraints The constraints to check
+ * @throws  {ConstraintError}
+ * @returns                               The same reference to the condition
+ */
+function validateCondition<T extends TypeRecord> (token: number, condition: Omit<UncheckedCondition, 'validated'>, constraints?: ExpressionConstraints<T>): Expression<CrystallizeTypeRecord<T>> & { type: 'condition' } {
+  let validated = false
+  const restriction = constraints?.restricted?.[condition.field]
+
+  const values = Array.isArray(condition.value) ? condition.value : [condition.value]
+
+  // Check if this field is allowed to be queried
+  if (restriction === true) throw new ConstraintError(token, `Field "${condition.field}" is restricted`)
+  else if (Array.isArray(restriction)) {
+    for (const entry of restriction) {
+      if (entry instanceof RegExp) {
+        if (values.some((v) => v.toString().match(entry))) throw new ConstraintError(token, `Value for field "${condition.field}" violates constraint "${entry.toString()}"`)
+      } else {
+        if (values.includes(entry)) throw new ConstraintError(token, `Forbidden value "${entry}" for field "${condition.field}"`)
+      }
+    }
+
+    validated = true
+  }
+
+  // Check if the value matches the operation's expected type
+  const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
+  let operationAllowed: boolean
+  switch (operationType) {
+    case 'primitive': operationAllowed = !Array.isArray(condition.value); break
+    case 'string': operationAllowed = typeof condition.value === 'string'; break
+    case 'number': operationAllowed = typeof condition.value === 'number'; break
+    case 'array': operationAllowed = Array.isArray(condition.value); break
+  }
+  if (!operationAllowed) throw new ConstraintError(token, `Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`)
+
+  // Check if the value matches the constrained type
+  const type = constraints?.types?.[condition.field]
+  if (type) {
+    const types = Array.isArray(type) ? type : [type]
+
+    const meets = values.every((v) => types.some((t) => {
+      switch (t) { // Don't do direct string comparison to leave possibility for custom non-JS types
+        case 'boolean': return typeof v === 'boolean'
+        case 'number': return typeof v === 'number'
+        case 'string': return typeof v === 'string'
+      }
+
+      return false
+    }))
+
+    if (!meets) throw new ConstraintError(token, `Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${types.join(', ')}`)
+  }
+
+  const edit = condition as Expression<CrystallizeTypeRecord<T>> & { type: 'condition' }
+  edit.validated = validated
+  return edit
+}
+
 /**
  * Parse tokens into an object expression
- * @param                tokens  The tokens to parse into an object expression
- * @param                _offset THe token offset
- * @returns                      An expression
- * @throws  {ParseError}
+ * @template T A type record, mapping field names to their types
+ * @param                                  tokens      The tokens to parse into an object expression
+ * @param                                  _offset     THe token offset
+ * @param                                  constraints Constraints to add on parsing such as forced types or restricted columns
+ * @returns                                            An expression
+ * @throws  {ParseError | ConstraintError}
  */
-function _parse (tokens: string[], _offset: number): Expression | null {
-  let field: Condition['field'] | undefined
-  let comparisonOperation: Condition['operation'] | undefined
-  let value: Condition['value'] | undefined
+function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, constraints?: ExpressionConstraints<T>): Expression<CrystallizeTypeRecord<T>> | null {
+  type TypedExpression = Expression<CrystallizeTypeRecord<T>>
+  let field: string | undefined
+  let comparisonOperation: ComparisonOperator | undefined
+  let value: Primitive | Primitive[] | undefined
   let inConjunction = false
 
   let groupOperation: JunctionOperator | undefined
-  const expressions: Expression[] = []
+  const expressions: TypedExpression[] = []
 
+  /**
+   * Resolve a condition from the defined variables
+   * @param               token      The current token position
+   * @param               noopIfFail Don't thow if unable to synthesize the condition
+   * @throws {ParseError}
+   */
   function resolveCondition (token: number, noopIfFail?: boolean): void {
-    let group: Expression[]
+    if (constraints?.caseInsensitive) field = field?.toLowerCase()
+
+    let group: TypedExpression[]
     if (inConjunction) {
       const prior = expressions.at(-1)
       if (!prior) throw new ParseError(token, 'Unexpected: Expression list empty when parser is meant to append to an AND group')
@@ -285,20 +443,20 @@ function _parse (tokens: string[], _offset: number): Expression | null {
     } else group = expressions
 
     if (field && comparisonOperation && value !== undefined) {
-      group.push({
+      group.push(validateCondition(token, {
         type: 'condition',
         field,
         operation: comparisonOperation,
         value
-      })
+      }))
       inConjunction = false
     } else if (field && !comparisonOperation && value === undefined) {
-      group.push({
+      group.push(validateCondition(token, {
         type: 'condition',
         field,
         operation: 'EQUAL',
         value: true
-      })
+      }))
       inConjunction = false
     } else if (field || comparisonOperation || value !== undefined) {
       if (noopIfFail) return
@@ -326,7 +484,7 @@ function _parse (tokens: string[], _offset: number): Expression | null {
       const closingIndex = getClosingIndex(tokens, t, '(', ')')
       if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
 
-      const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1)
+      const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1, constraints)
       if (subExpression) expressions.push(subExpression)
 
       t = closingIndex
@@ -335,7 +493,7 @@ function _parse (tokens: string[], _offset: number): Expression | null {
 
     const op = OPERATION_ALIAS_DICTIONARY[token as keyof typeof OPERATION_ALIAS_DICTIONARY] as Operation | undefined
 
-    if (op && OPERATION_DICTIONARY[op] === 'junction') {
+    if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'junction') {
       resolveCondition(_offset + t, true)
 
       const prior = expressions.at(-1)
@@ -344,7 +502,7 @@ function _parse (tokens: string[], _offset: number): Expression | null {
       if (groupOperation && groupOperation !== op) {
         switch (groupOperation) {
           case 'AND': { // assume op = OR
-            const futureSubgroup = _parse(tokens.slice(t + 1), _offset + t)
+            const futureSubgroup = _parse(tokens.slice(t + 1), _offset + t, constraints)
             if (futureSubgroup === null) throw new ParseError(_offset + t, 'Dangling junction operator')
 
             return { // End for loop here
@@ -392,9 +550,9 @@ function _parse (tokens: string[], _offset: number): Expression | null {
         const closingIndex = getClosingIndex(tokens, t + 1, '(', ')')
         if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
 
-        const futureSubExpression = _parse(tokens.slice(t + 2, closingIndex), t + 2)
+        const futureSubExpression = _parse(tokens.slice(t + 2, closingIndex), t + 2, constraints)
         if (futureSubExpression) {
-          inverseExpression(futureSubExpression)
+          complementExpression(futureSubExpression)
 
           if (futureSubExpression.type === 'group' && futureSubExpression.operation === groupOperation) expressions.push(...futureSubExpression.constituents)
           else expressions.push(futureSubExpression)
@@ -423,8 +581,8 @@ function _parse (tokens: string[], _offset: number): Expression | null {
       continue
     }
 
-    if (!comparisonOperation || (op && OPERATION_DICTIONARY[op] === 'comparison')) {
-      if (op && OPERATION_DICTIONARY[op] === 'comparison') comparisonOperation = op as ComparisonOperator
+    if (!comparisonOperation || (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison')) {
+      if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison') comparisonOperation = op as ComparisonOperator
       else {
         comparisonOperation = 'EQUAL'
         value = true
@@ -494,12 +652,14 @@ function _parse (tokens: string[], _offset: number): Expression | null {
 
 /**
  * Parse a Wizard expression into its object form
- * @param                        expression The Wizard expression
- * @returns                                 The object representation
- * @throws  {ParseError | Error}            A parsing error
+ * @template T A type record, mapping field names to their types
+ * @param                                  expression  The Wizard expression
+ * @param                                  constraints Constraints to add on parsing such as forced types or restricted columns
+ * @returns                                            The object representation
+ * @throws  {ParseError | ConstraintError}
  */
-export function parse (expression: string): Expression | null {
+export function parse<const T extends TypeRecord> (expression: string, constraints?: ExpressionConstraints<T>): Expression<CrystallizeTypeRecord<T>> | null {
   const tokens = tokenize(expression)
 
-  return _parse(tokens, 0)
+  return _parse(tokens, 0, constraints)
 }

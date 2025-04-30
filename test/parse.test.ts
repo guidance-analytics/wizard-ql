@@ -36,34 +36,39 @@ test('basic query', () => {
     type: 'condition',
     field: 'field',
     operation: 'EQUAL',
-    value: 'value'
+    value: 'value',
+    validated: false
   })
 
   expect(parse('field : [foo bar , "baz", ` foobar `]'), 'array query').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'IN',
-    value: ['foo bar', 'baz', ' foobar ']
+    value: ['foo bar', 'baz', ' foobar '],
+    validated: false
   })
 
   expect(parse('field < 8'), 'numbers').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'LESS',
-    value: 8
+    value: 8,
+    validated: false
   })
 
   expect(parse('field matches ".*substr.*"'), 'regex').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'MATCHES',
-    value: '.*substr.*'
+    value: '.*substr.*',
+    validated: false
   })
   expect(parse('field !~ "f{3}"'), 'notregex').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'NOTMATCHES',
-    value: 'f{3}'
+    value: 'f{3}',
+    validated: false
   })
 })
 
@@ -72,7 +77,8 @@ test('implicit boolean', () => {
     type: 'condition',
     field: 'field',
     operation: 'EQUAL',
-    value: true
+    value: true,
+    validated: false
   })
 
   expect(parse('field & foo = bar'), 'with junction').toEqual({
@@ -83,13 +89,15 @@ test('implicit boolean', () => {
         type: 'condition',
         field: 'field',
         operation: 'EQUAL',
-        value: true
+        value: true,
+        validated: false
       },
       {
         type: 'condition',
         field: 'foo',
         operation: 'EQUAL',
-        value: 'bar'
+        value: 'bar',
+        validated: false
       }
     ]
   })
@@ -98,44 +106,58 @@ test('implicit boolean', () => {
     type: 'condition',
     field: 'foo',
     operation: 'EQUAL',
-    value: false
+    value: false,
+    validated: false
   })
 })
 
 test('escaped parsing', () => {
+  expect(parse('field neq \'2\''), 'numeric as string').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'NOTEQUAL',
+    value: '2',
+    validated: false
+  })
+
   expect(parse('"field 1" = foo\\ bar'), 'quoted field escaped value').toEqual({
     type: 'condition',
     field: 'field 1',
     operation: 'EQUAL',
-    value: 'foo bar'
+    value: 'foo bar',
+    validated: false
   })
 
   expect(parse('field\\ 1 = \'foo bar\''), 'escaped field quoted value').toEqual({
     type: 'condition',
     field: 'field 1',
     operation: 'EQUAL',
-    value: 'foo bar'
+    value: 'foo bar',
+    validated: false
   })
 
   expect(parse('field1 = \\"value spaced\\"'), 'escaped quotes field').toEqual({
     type: 'condition',
     field: 'field1',
     operation: 'EQUAL',
-    value: '"value spaced"'
+    value: '"value spaced"',
+    validated: false
   })
 
   expect(parse('\'field\' = "\\"value\\" \\"spaced\\""'), 'escaped inner quotes field').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'EQUAL',
-    value: '"value" "spaced"'
+    value: '"value" "spaced"',
+    validated: false
   })
 
-  expect(parse('field != ["entry, 1", entry 2, \'\\\'entry 3\\\'\']'), 'array entries').toEqual({
+  expect(parse('field !: ["entry, 1", entry 2, \'\\\'entry 3\\\'\']'), 'array entries').toEqual({
     type: 'condition',
     field: 'field',
-    operation: 'NOTEQUAL',
-    value: ['entry, 1', 'entry 2', '\\\'entry 3\\\'']
+    operation: 'NOTIN',
+    value: ['entry, 1', 'entry 2', '\\\'entry 3\\\''],
+    validated: false
   })
 })
 
@@ -171,13 +193,15 @@ test('closure hell', () => {
             type: 'condition',
             field: 'foo',
             operation: 'EQUAL',
-            value: true
+            value: true,
+            validated: false
           },
           {
             type: 'condition',
             field: 'bar',
             operation: 'EQUAL',
-            value: true
+            value: true,
+            validated: false
           }
         ]
       },
@@ -185,7 +209,8 @@ test('closure hell', () => {
         type: 'condition',
         field: 'baz',
         operation: 'EQUAL',
-        value: true
+        value: true,
+        validated: false
       }
     ]
   })
@@ -200,13 +225,15 @@ test('groups', () => {
         type: 'condition',
         field: 'field1',
         operation: 'EQUAL',
-        value: 'value1'
+        value: 'value1',
+        validated: false
       },
       {
         type: 'condition',
         field: 'field 2',
         operation: 'LESS',
-        value: 2
+        value: 2,
+        validated: false
       }
     ]
   })
@@ -219,18 +246,20 @@ test('groups', () => {
         type: 'condition',
         field: 'field1',
         operation: 'EQUAL',
-        value: 'value1'
+        value: 'value1',
+        validated: false
       },
       {
         type: 'condition',
         field: 'field 2',
         operation: 'GREATER',
-        value: 2
+        value: 2,
+        validated: false
       }
     ]
   })
 
-  expect(parse('field1 = value1 or (field 2 : value 2 && field_3 = value 3)'), 'complex group').toEqual({
+  expect(parse('field1 = value1 or (field 2 : [value 2] && field_3 = value 3)'), 'complex group').toEqual({
     type: 'group',
     operation: 'OR',
     constituents: [
@@ -238,7 +267,8 @@ test('groups', () => {
         type: 'condition',
         field: 'field1',
         operation: 'EQUAL',
-        value: 'value1'
+        value: 'value1',
+        validated: false
       },
       {
         type: 'group',
@@ -248,15 +278,52 @@ test('groups', () => {
             type: 'condition',
             field: 'field 2',
             operation: 'IN',
-            value: 'value 2'
+            value: ['value 2'],
+            validated: false
           },
           {
             type: 'condition',
             field: 'field_3',
             operation: 'EQUAL',
-            value: 'value 3'
+            value: 'value 3',
+            validated: false
           }
         ]
+      }
+    ]
+  })
+
+  expect(parse('boolean & field = value and number < 3 and array in [1, "2", 3]'), 'big and').toEqual({
+    type: 'group',
+    operation: 'AND',
+    constituents: [
+      {
+        type: 'condition',
+        field: 'boolean',
+        operation: 'EQUAL',
+        value: true,
+        validated: false
+      },
+      {
+        type: 'condition',
+        field: 'field',
+        operation: 'EQUAL',
+        value: 'value',
+        validated: false
+      },
+      {
+        type: 'condition',
+        field: 'number',
+        operation: 'LESS',
+        value: 3,
+        validated: false
+      },
+      {
+        type: 'condition',
+        field: 'array',
+        operation: 'IN',
+        value: [1, '2', 3],
+        validated: false
       }
     ]
   })
@@ -281,13 +348,15 @@ test('group disjunction', () => {
             type: 'condition',
             field: 'field1',
             operation: 'EQUAL',
-            value: true
+            value: true,
+            validated: false
           },
           {
             type: 'condition',
             field: 'field2',
             operation: 'EQUAL',
-            value: true
+            value: true,
+            validated: false
           }
         ]
       },
@@ -295,7 +364,8 @@ test('group disjunction', () => {
         type: 'condition',
         field: 'field3',
         operation: 'EQUAL',
-        value: false
+        value: false,
+        validated: false
       }
     ]
   })
@@ -308,7 +378,8 @@ test('group disjunction', () => {
         type: 'condition',
         field: 'vfield1',
         operation: 'EQUAL',
-        value: true
+        value: true,
+        validated: false
       },
       {
         type: 'group',
@@ -318,13 +389,15 @@ test('group disjunction', () => {
             type: 'condition',
             field: 'field2',
             operation: 'EQUAL',
-            value: true
+            value: true,
+            validated: false
           },
           {
             type: 'condition',
             field: 'field3',
             operation: 'EQUAL',
-            value: false
+            value: false,
+            validated: false
           }
         ]
       }
@@ -348,7 +421,8 @@ test('NOT on group', () => {
         type: 'condition',
         operation: 'EQUAL',
         field: 'foo',
-        value: true
+        value: true,
+        validated: false
       },
       {
         type: 'group',
@@ -358,13 +432,15 @@ test('NOT on group', () => {
             type: 'condition',
             field: 'bar',
             operation: 'NOTEQUAL',
-            value: true
+            value: true,
+            validated: false
           },
           {
             type: 'condition',
             field: 'baz',
             operation: 'NOTEQUAL',
-            value: true
+            value: true,
+            validated: false
           }
         ]
       }
@@ -379,7 +455,8 @@ test('NOT on group', () => {
         type: 'condition',
         operation: 'EQUAL',
         field: 'foo',
-        value: true
+        value: true,
+        validated: false
       },
       {
         type: 'group',
@@ -389,13 +466,15 @@ test('NOT on group', () => {
             type: 'condition',
             field: 'bar',
             operation: 'NOTEQUAL',
-            value: true
+            value: true,
+            validated: false
           },
           {
             type: 'condition',
             field: 'baz',
             operation: 'NOTEQUAL',
-            value: true
+            value: true,
+            validated: false
           }
         ]
       }
@@ -410,13 +489,15 @@ test('NOT on group', () => {
         type: 'condition',
         field: 'foo',
         operation: 'EQUAL',
-        value: true
+        value: true,
+        validated: false
       },
       {
         type: 'condition',
         field: 'bar',
         operation: 'NOTEQUAL',
-        value: true
+        value: true,
+        validated: false
       },
       {
         type: 'group',
@@ -426,13 +507,15 @@ test('NOT on group', () => {
             type: 'condition',
             field: 'baz',
             operation: 'NOTEQUAL',
-            value: true
+            value: true,
+            validated: false
           },
           {
             type: 'condition',
             field: 'foobar',
             operation: 'NOTEQUAL',
-            value: false
+            value: false,
+            validated: false
           }
         ]
       }
@@ -440,60 +523,69 @@ test('NOT on group', () => {
   })
 })
 
-test('inverse operators', () => {
+test('complement operators', () => {
   expect(parse('!(foo = string)'), 'equal').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'NOTEQUAL',
-    value: 'string'
+    value: 'string',
+    validated: false
   })
   expect(parse('!(foo = string)'), 'notequal').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'NOTEQUAL',
-    value: 'string'
+    value: 'string',
+    validated: false
   })
   expect(parse('!(foo >= 2)'), 'geq').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'LESS',
-    value: 2
+    value: 2,
+    validated: false
   })
   expect(parse('!(foo <= 2)'), 'leq').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'GREATER',
-    value: 2
+    value: 2,
+    validated: false
   })
   expect(parse('!(foo < 2)'), 'less').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'GEQ',
-    value: 2
+    value: 2,
+    validated: false
   })
   expect(parse('!(foo > 2)'), 'equal').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'LEQ',
-    value: 2
+    value: 2,
+    validated: false
   })
   expect(parse('!(foo notin [1])'), 'notin').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'IN',
-    value: [1]
+    value: [1],
+    validated: false
   })
   expect(parse('!(foo ~ expression?)'), 'matches').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'NOTMATCHES',
-    value: 'expression?'
+    value: 'expression?',
+    validated: false
   })
 
   expect(parse('!(foo notmatches expression?)'), 'notmatches').toEqual({
     type: 'condition',
     field: 'foo',
     operation: 'MATCHES',
-    value: 'expression?'
+    value: 'expression?',
+    validated: false
   })
 })

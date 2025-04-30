@@ -1,10 +1,10 @@
-import type { ComparisonOperator, Condition, Expression } from './parse'
+import type { ComparisonOperator, Expression, OperationTypeToTSType } from './parse'
 
-export interface AggregationValue {
+export interface AggregationValue<O extends ComparisonOperator = ComparisonOperator> {
   /** The value being checked */
-  value: Condition['value']
+  value: OperationTypeToTSType<O>
   /** The operator being used */
-  operation: ComparisonOperator
+  operation: O
   /** Is this an exclusionary operator? (Ex: NOT, NOTIN) */
   exclusionary: boolean
 }
