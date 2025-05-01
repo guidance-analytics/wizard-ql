@@ -59,14 +59,14 @@ test('basic query', () => {
   expect(parse('field matches ".*substr.*"'), 'regex').toEqual({
     type: 'condition',
     field: 'field',
-    operation: 'MATCHES',
+    operation: 'MATCH',
     value: '.*substr.*',
     validated: false
   })
   expect(parse('field !~ "f{3}"'), 'notregex').toEqual({
     type: 'condition',
     field: 'field',
-    operation: 'NOTMATCHES',
+    operation: 'NOTMATCH',
     value: 'f{3}',
     validated: false
   })
@@ -156,7 +156,7 @@ test('escaped parsing', () => {
     type: 'condition',
     field: 'field',
     operation: 'NOTIN',
-    value: ['entry, 1', 'entry 2', '\\\'entry 3\\\''],
+    value: ['entry, 1', 'entry 2', '\'entry 3\''],
     validated: false
   })
 })
@@ -614,7 +614,7 @@ test('complement operators', () => {
   expect(parse('!(foo ~ expression?)'), 'matches').toEqual({
     type: 'condition',
     field: 'foo',
-    operation: 'NOTMATCHES',
+    operation: 'NOTMATCH',
     value: 'expression?',
     validated: false
   })
@@ -622,7 +622,7 @@ test('complement operators', () => {
   expect(parse('!(foo notmatches expression?)'), 'notmatches').toEqual({
     type: 'condition',
     field: 'foo',
-    operation: 'MATCHES',
+    operation: 'MATCH',
     value: 'expression?',
     validated: false
   })
@@ -638,8 +638,8 @@ test('operation constraints', () => {
     ['LESS', 'false'],
     ['IN', 'string'],
     ['NOTIN', '42'],
-    ['MATCHES', '[1, 2]'],
-    ['NOTMATCHES', '12']
+    ['MATCH', '[1, 2]'],
+    ['NOTMATCH', '12']
   ]
 
   for (const [op, value] of tests) expect(() => parse(`field ${op} ${value}`), op).toThrow(ConstraintError)

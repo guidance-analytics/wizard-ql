@@ -49,11 +49,13 @@ export const OPERATION_ALIAS_DICTIONARY = {
   'IN': 'IN',
   ':': 'IN',
 
-  'NOTMATCHES': 'NOTMATCHES',
-  '!~': 'NOTMATCHES',
+  'NOTMATCHES': 'NOTMATCH',
+  'NOTMATCH': 'NOTMATCH',
+  '!~': 'NOTMATCH',
 
-  'MATCHES': 'MATCHES',
-  '~': 'MATCHES'
+  'MATCHES': 'MATCH',
+  'MATCH': 'MATCH',
+  '~': 'MATCH'
 } as const
 /* eslint-enable @stylistic/quote-props */
 
@@ -71,8 +73,8 @@ export const OPERATION_PURPOSE_DICTIONARY = {
   LEQ: 'comparison',
   IN: 'comparison',
   NOTIN: 'comparison',
-  MATCHES: 'comparison',
-  NOTMATCHES: 'comparison'
+  MATCH: 'comparison',
+  NOTMATCH: 'comparison'
 } as const satisfies Record<Operation, 'junction' | 'comparison'>
 
 export type JunctionOperation = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'junction'>
@@ -89,8 +91,8 @@ export const COMPARISON_TYPE_DICTIONARY = {
   LESS: 'number',
   IN: 'array',
   NOTIN: 'array',
-  MATCHES: 'string',
-  NOTMATCHES: 'string'
+  MATCH: 'string',
+  NOTMATCH: 'string'
 } as const satisfies Record<ComparisonOperation, ComparisonValueType>
 /** Convert an operation's comparison type to a language server type */
 export type ComparisonTypeToTSType<T extends keyof typeof COMPARISON_TYPE_DICTIONARY> = {
@@ -181,10 +183,10 @@ type UncheckedConditionSpread = {
 export type Expression<R extends Record<string, Primitive> = Record<string, Primitive>> = Group<R> | CheckedConditionSpread<R> | UncheckedConditionSpread
 
 const ALIASES = Object.keys(OPERATION_ALIAS_DICTIONARY)
-const ESCAPE_REGEX = '(?<!(?<!\\\\)\\\\)'
+export const ESCAPE_REGEX = '(?<!(?<!\\\\)\\\\)'
 const QUOTES = ['\'', '"', '`']
 const QUOTE_TOKEN_REGEX_STR = `${ESCAPE_REGEX}(?<quote>${QUOTES.map((q) => RegExp.escape(q)).join('|')})(?<quotecontent>.*?)${ESCAPE_REGEX}\\k<quote>`
-const QUOTE_EDGE_REGEX = new RegExp(`^${QUOTE_TOKEN_REGEX_STR}$`)
+export const QUOTE_EDGE_REGEX = new RegExp(`^${QUOTE_TOKEN_REGEX_STR}$`)
 
 /**
  * Create a Regex to find tokens
@@ -333,8 +335,8 @@ function complementExpression<R extends Record<string, Primitive>> (expression: 
         case 'GREATER': expression.operation = 'LEQ'; break
         case 'IN': expression.operation = 'NOTIN'; break
         case 'NOTIN': expression.operation = 'IN'; break
-        case 'MATCHES': expression.operation = 'NOTMATCHES'; break
-        case 'NOTMATCHES': expression.operation = 'MATCHES'; break
+        case 'MATCH': expression.operation = 'NOTMATCH'; break
+        case 'NOTMATCH': expression.operation = 'MATCH'; break
       }
 
       break
@@ -511,6 +513,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
       if (closingIndex === -1) throw new ParseError(_offset + t, 'Missing closing parenthesis for group')
 
       const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1, constraints)
+      // Simplification
       if (subExpression) {
         if (subExpression.type === 'group' && subExpression.operation === groupOperation) expressions.push(...subExpression.constituents)
         else expressions.push(subExpression)
@@ -566,6 +569,13 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
       }
 
       groupOperation = op as JunctionOperation
+      // Simplification
+      if (expressions.length === 1 && expressions[0]?.type === 'group' && expressions[0].operation === groupOperation) {
+        const exp = expressions[0]
+        expressions.splice(0, 1)
+
+        expressions.push(...exp.constituents)
+      }
 
       continue
     }
@@ -583,6 +593,7 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
         if (futureSubExpression) {
           complementExpression(futureSubExpression)
 
+          // Simplification
           if (futureSubExpression.type === 'group' && futureSubExpression.operation === groupOperation) expressions.push(...futureSubExpression.constituents)
           else expressions.push(futureSubExpression)
         }
@@ -634,11 +645,11 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
         function resolveEntry (): void {
           const {
             unquoted: unquotedWorkingEntry,
-            escaped: escapedWorkingEntry
+            unescaped: unescapedWorkingEntry
           } = processToken(workingEntry)
 
           if (workingEntry) {
-            (value as Primitive[]).push(parseValue(escapedWorkingEntry, unquotedWorkingEntry !== undefined))
+            (value as Primitive[]).push(parseValue(unescapedWorkingEntry, unquotedWorkingEntry !== undefined))
             workingEntry = ''
           }
         }
@@ -687,13 +698,13 @@ function _parse<const T extends TypeRecord> (tokens: string[], _offset: number, 
 /**
  * Parse a Wizard expression into its object form
  * @template T A type record, mapping field names to their types
- * @param                                  expression  The Wizard expression
+ * @param                                  expression  The Wizard expression as a string or as an array of tokens
  * @param                                  constraints Constraints to add on parsing such as forced types or restricted columns
  * @returns                                            The object representation
  * @throws  {ParseError | ConstraintError}
  */
-export function parse<const T extends TypeRecord> (expression: string, constraints?: ExpressionConstraints<T>): Expression<ConvertTypeRecord<T>> | null {
-  const tokens = tokenize(expression)
+export function parse<const T extends TypeRecord> (expression: string | string[], constraints?: ExpressionConstraints<T>): Expression<ConvertTypeRecord<T>> | null {
+  const tokens = Array.isArray(expression) ? expression : tokenize(expression)
 
   return _parse(tokens, 0, constraints)
 }

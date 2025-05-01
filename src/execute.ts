@@ -28,8 +28,8 @@ export function executeAsKnex (query: Knex.QueryBuilder, expression: Expression)
         case 'LESS': query.where(expression.field, '<', expression.value); break
         case 'IN': query.whereIn(expression.field, expression.value); break
         case 'NOTIN': query.whereNotIn(expression.field, expression.value); break
-        case 'MATCHES': query.whereRaw('?? ~* ?', [expression.field, expression.value]); break
-        case 'NOTMATCHES': query.whereRaw('?? !~* ?', [expression.field, expression.value]); break
+        case 'MATCH': query.whereRaw('?? ~* ?', [expression.field, expression.value]); break
+        case 'NOTMATCH': query.whereRaw('?? !~* ?', [expression.field, expression.value]); break
       }
   }
 }

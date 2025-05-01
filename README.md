@@ -16,4 +16,4 @@
   𝗟<sub>anguage</sub>
 </h2>
 
-#### WizardQL is a natural-language-like query language for constructing data queries for certain resources that meet conditions.
+#### WizardQL is a natural-language-like query language for constructing data queries for resources that meet conditions.
