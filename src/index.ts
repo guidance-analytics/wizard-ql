@@ -17,6 +17,7 @@ export {
 
 export {
   type ExpressionConstraints,
+  QUOTE_EDGE_REGEX,
   parse,
   tokenize
 } from './parse'

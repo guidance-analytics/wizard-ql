@@ -615,6 +615,9 @@ test('NOT on group', () => {
       }
     ]
   })
+
+  expect(() => parse('!foo OR bar = value & !(field)')).not.toThrow()
+  expect(() => parse('!foo OR bar = value & !(field)')).not.toThrow()
 })
 
 test('complement operators', () => {

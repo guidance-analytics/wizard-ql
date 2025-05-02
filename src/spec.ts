@@ -29,6 +29,7 @@ export const OPERATION_ALIAS_DICTIONARY = {
 
   'EQUALS': 'EQUAL',
   'EQUAL': 'EQUAL',
+  'EQ': 'EQUAL',
   'IS': 'EQUAL',
   '==': 'EQUAL',
   '=': 'EQUAL',

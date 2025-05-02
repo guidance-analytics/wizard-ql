@@ -19,7 +19,7 @@ import {
 import { ConstraintError, ParseError } from './errors'
 
 const TOKEN_REGEX = new RegExp(createTokenRegexString(), 'g')
-const QUOTE_EDGE_REGEX = new RegExp(createQuoteEdgeRegexString())
+export const QUOTE_EDGE_REGEX = new RegExp(createQuoteEdgeRegexString())
 
 /**
  * Take a string, sanitize it, and push it to an array if it has a length
@@ -266,6 +266,24 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
   const expressions: TypedExpression[] = []
 
   /**
+   * Get the expression group to push to (local or a subgroup for inConjunction)
+   * @param                token The current token
+   * @param                index The current token's index
+   * @warn You probably need to set inConjunction to false after using this
+   * @returns                    The group to push to
+   * @throws  {ParseError}
+   */
+  function getExpressionGroup (token: Token | undefined, index: number): TypedExpression[] {
+    if (inConjunction) {
+      const prior = expressions.at(-1)
+      if (!prior) throw new ParseError(token, index, 'Unexpected: Expression list empty when parser is meant to append to an AND group')
+      if (prior.type !== 'group' || prior.operation !== 'AND') throw new ParseError(token, index, 'Unexpected: Last expression is not an AND group yet parser thinks it\'s appending to one')
+
+      return prior.constituents
+    } return expressions
+  }
+
+  /**
    * Resolve a condition from the defined variables
    * @param               token      The current token
    * @param               index      The current token's index
@@ -275,14 +293,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
   function resolveCondition (token: Token | undefined, index: number, noopIfFail?: boolean): void {
     if (constraints?.caseInsensitive) field = field?.toLowerCase()
 
-    let group: TypedExpression[]
-    if (inConjunction) {
-      const prior = expressions.at(-1)
-      if (!prior) throw new ParseError(token, index, 'Unexpected: Expression list empty when parser is meant to append to an AND group')
-      if (prior.type !== 'group' || prior.operation !== 'AND') throw new ParseError(token, index, 'Unexpected: Last expression is not an AND group yet parser thinks it\'s appending to one')
-
-      group = prior.constituents
-    } else group = expressions
+    const group = getExpressionGroup(token, index)
 
     if (field && comparisonOperation && value !== undefined) {
       group.push(validateCondition(token, index, {
@@ -330,7 +341,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
       // Simplification
       if (subExpression) {
         if (subExpression.type === 'group' && subExpression.operation === groupOperation) expressions.push(...subExpression.constituents)
-        else expressions.push(subExpression)
+        else {
+          const group = getExpressionGroup(token, _offset + t)
+          group.push(subExpression)
+          inConjunction = false
+        }
       }
 
       t = closingIndex
@@ -409,7 +424,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
 
           // Simplification
           if (futureSubExpression.type === 'group' && futureSubExpression.operation === groupOperation) expressions.push(...futureSubExpression.constituents)
-          else expressions.push(futureSubExpression)
+          else {
+            const group = getExpressionGroup(token, _offset + t)
+            group.push(futureSubExpression)
+            inConjunction = false
+          }
         }
 
         t = closingIndex
@@ -498,7 +517,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
   try {
     resolveCondition(undefined, _offset + tokens.length - 1)
   } catch (err) {
-    if (err instanceof ParseError) throw new ParseError(tokens.at(-1), _offset + tokens.length - 1, 'Reached end of expression with an incomplete condition')
+    if (err instanceof ParseError) throw new ParseError(tokens.at(-1), _offset + tokens.length - 1, `Reached end of expression with an incomplete condition (${err.message})`)
     else throw err
   }
 
