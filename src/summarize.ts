@@ -1,4 +1,4 @@
-import type { ComparisonOperation, Expression, ComparisonTypeToTSType } from './parse'
+import type { ComparisonOperation, Expression, ComparisonTypeToTSType } from './spec'
 
 export interface AggregationValue<O extends ComparisonOperation = ComparisonOperation> {
   /** The value being checked */

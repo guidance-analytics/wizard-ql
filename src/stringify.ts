@@ -1,6 +1,7 @@
-import { ESCAPE_REGEX, type Expression, type JunctionOperation, type Operation, type Primitive } from './parse'
+import { ESCAPE_REGEX } from './regex'
+import type { Expression, JunctionOperation, Operation, Primitive } from './spec'
 
-interface StringifyOptions {
+export interface StringifyOptions {
   /**
    * The notation to use for junction operations
    * @example Programmatic: foo & bar

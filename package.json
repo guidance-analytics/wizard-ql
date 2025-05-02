@@ -1,11 +1,12 @@
 {
   "name": "wizard-ql",
-  "module": "index.ts",
   "main": "dist/index.js",
+  "module": "dist/index.js",
   "type": "module",
+  "types": "dist/index.d.ts",
   "files": ["dist/"],
   "scripts": {
-    "build": "bun build --target=node --format=esm --packages external --minify index.ts --outfile dist/index.js"
+    "build": "rm -r dist && bun build --target=node --format=esm --packages external --minify src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -13,10 +14,10 @@
     "eslint-plugin-jsdoc": "^50.6.11",
     "neostandard": "^0.12.1"
   },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
   "optionalDependencies": {
     "knex": "^3.1.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
   }
 }

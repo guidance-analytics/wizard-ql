@@ -1,6 +1,7 @@
 import { test, expect } from 'bun:test'
 
-import { OPERATION_ALIAS_DICTIONARY, tokenize, parse, type ComparisonOperation } from '../src/parse'
+import { type ComparisonOperation, OPERATION_ALIAS_DICTIONARY } from '../src/spec'
+import { tokenize, parse } from '../src/parse'
 import { ConstraintError, ParseError } from '../src/errors'
 
 test('tokenization', () => {

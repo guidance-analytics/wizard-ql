@@ -1,5 +1,5 @@
 import type { Knex } from 'knex'
-import type { Expression } from './parse'
+import type { Expression } from './spec'
 
 /**
  * Execute a Wizard expression as a SQL query
