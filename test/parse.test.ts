@@ -20,16 +20,71 @@ test('tokenization', () => {
   }
 
   for (const string in strings) {
-    expect(tokenize(string), string).toEqual(strings[string as keyof typeof strings])
+    expect(tokenize(string).map((t) => t.content), string).toEqual(strings[string as keyof typeof strings])
   }
 
   for (const operation in OPERATION_ALIAS_DICTIONARY) {
     const string = `field ${operation.toLowerCase()} value`
 
-    expect(tokenize(string), string).toEqual(['field', operation, 'value'])
+    expect(tokenize(string).map((t) => t.content), string).toEqual(['field', operation, 'value'])
   }
 
-  expect(tokenize('one\\ token'), 'one\\ token').toEqual(['one\\ token'])
+  expect(tokenize('one\\ token').map((t) => t.content), 'one\\ token').toEqual(['one\\ token'])
+
+  expect(tokenize('foo = bar or (field : [1, 2])'), 'indices').toEqual([
+    {
+      content: 'foo',
+      index: 0
+    },
+    {
+      content: '=',
+      index: 4
+    },
+    {
+      content: 'bar',
+      index: 6
+    },
+    {
+      content: 'OR',
+      index: 10
+    },
+    {
+      content: '(',
+      index: 13
+    },
+    {
+      content: 'field',
+      index: 14
+    },
+    {
+      content: ':',
+      index: 20
+    },
+    {
+      content: '[',
+      index: 22
+    },
+    {
+      content: '1',
+      index: 23
+    },
+    {
+      content: ',',
+      index: 24
+    },
+    {
+      content: '2',
+      index: 26
+    },
+    {
+      content: ']',
+      index: 27
+    },
+    {
+      content: ')',
+      index: 28
+    }
+  ])
 })
 
 test('basic query', () => {
@@ -166,22 +221,22 @@ test('invalid operands', () => {
   expect(() => parse('"1" "2" "3"'), 'no comparison').toThrow(ParseError)
   expect(() => parse('1 = "2 3" "4 5"'), 'too many operands').toThrow(ParseError)
   expect(() => parse('field in []'), 'no array entries').toThrow(ParseError)
-  expect(() => parse('field in []'), 'no array entries').toThrow('Token #3: Empty array provided as value')
+  expect(() => parse('field in []'), 'no array entries').toThrow('Token #2 (9 -> 11 "[]"): Empty array provided as value')
   expect(() => parse('[entry] = bar'), 'array as field').toThrow(ParseError)
 })
 
 test('unclosed closures', () => {
   expect(() => parse('(foo'), 'parenthesis').toThrow(ParseError)
-  expect(() => parse('(foo'), 'parenthesis').toThrow('Token #0: Missing closing parenthesis for group')
+  expect(() => parse('(foo'), 'parenthesis').toThrow('Token #0 (0 -> 1 "("): Missing closing parenthesis for group')
   expect(() => parse('foo : [1'), 'bracket').toThrow(ParseError)
-  expect(() => parse('foo : [1'), 'bracket').toThrow('Token #2: Missing closing bracket/brace for array value')
+  expect(() => parse('foo : [1'), 'bracket').toThrow('Token #2 (6 -> 7 "["): Missing closing bracket/brace for array value')
   expect(() => parse('foo : {1'), 'brace').toThrow(ParseError)
-  expect(() => parse('foo : {1'), 'brace').toThrow('Token #2: Missing closing bracket/brace for array value')
+  expect(() => parse('foo : {1'), 'brace').toThrow('Token #2 (6 -> 7 "{"): Missing closing bracket/brace for array value')
 
   expect(() => parse(')test'), 'unopened parenthesis').toThrow(ParseError)
-  expect(() => parse(')test'), 'unopened parenthesis').toThrow('Token #0: Unexpected closing parenthesis')
+  expect(() => parse(')test'), 'unopened parenthesis').toThrow('Token #0 (0 -> 1 ")"): Unexpected closing parenthesis')
   expect(() => parse('field = ]test'), 'unopened bracket').toThrow(ParseError)
-  expect(() => parse('field = ]test'), 'unopened bracket').toThrow('Token #2: Unexpected closing bracket/brace')
+  expect(() => parse('field = ]test'), 'unopened bracket').toThrow('Token #2 (8 -> 9 "]"): Unexpected closing bracket/brace')
 })
 
 test('closure hell', () => {
@@ -445,10 +500,10 @@ test('group disjunction', () => {
 })
 
 test('dangling junctions', () => {
-  expect(() => parse('^ foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
-  expect(() => parse('foo^')).toThrow('Token #1: Dangling junction operator')
-  expect(() => parse('V foo')).toThrow('Token #0: Unexpected junction operator with no preceding expression')
-  expect(() => parse('foo or')).toThrow('Token #1: Dangling junction operator')
+  expect(() => parse('^ foo')).toThrow('Token #0 (0 -> 1 "^"): Unexpected junction operator with no preceding expression')
+  expect(() => parse('foo^')).toThrow('Token #1 (3 -> 4 "^"): Dangling junction operator')
+  expect(() => parse('V foo')).toThrow('Token #0 (0 -> 1 "V"): Unexpected junction operator with no preceding expression')
+  expect(() => parse('foo or')).toThrow('Token #1 (4 -> 6 "OR"): Dangling junction operator')
 })
 
 test('NOT on group', () => {

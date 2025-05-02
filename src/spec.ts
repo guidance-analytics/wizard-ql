@@ -56,6 +56,11 @@ export const OPERATION_ALIAS_DICTIONARY = {
 } as const
 /* eslint-enable @stylistic/quote-props */
 
+export interface Token {
+  content: string
+  index: number
+}
+
 export type Operation = (typeof OPERATION_ALIAS_DICTIONARY)[keyof typeof OPERATION_ALIAS_DICTIONARY]
 
 export const ALIASES = Object.keys(OPERATION_ALIAS_DICTIONARY)
