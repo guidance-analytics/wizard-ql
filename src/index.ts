@@ -8,6 +8,7 @@ export {
   type Group,
   type Primitive,
   type TypeRecord,
+  type Token,
   type ComparisonTypeToTSType,
   OPERATION_PURPOSE_DICTIONARY,
   COMPARISON_TYPE_DICTIONARY,
