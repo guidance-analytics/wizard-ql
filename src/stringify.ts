@@ -79,7 +79,7 @@ const formats = {
 function addQuotesIfNecessary (value: Primitive): Primitive {
   if (typeof value !== 'string') return value
 
-  const number = parseFloat(value)
+  const number = Number(value)
   return isNaN(number) && !value.match(`${ESCAPE_REGEX}[[\\]()]`)
     ? value === 'true'
       ? '"true"'

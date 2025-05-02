@@ -70,7 +70,7 @@ export function tokenize (expression: string): Token[] {
  * @returns        The parsed token
  */
 function parseValue (token: string, isQuoted: boolean): boolean | number | string {
-  const number = parseFloat(token)
+  const number = Number(token)
   return isQuoted || isNaN(number) ? token === 'true' ? true : token === 'false' ? false : token : number
 }
 
