@@ -58,7 +58,9 @@ export const OPERATION_ALIAS_DICTIONARY = {
 /* eslint-enable @stylistic/quote-props */
 
 export interface Token {
+  /** The text content of the token */
   content: string
+  /** The index in the original expression this token originates from */
   index: number
 }
 
