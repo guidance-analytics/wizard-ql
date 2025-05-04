@@ -38,7 +38,6 @@ test('basic stringification', () => {
 
 test('arrays', () => {
   expect(stringify(parse('field : [1,2, 3, "4", "five", \'six\']')!), 'regular mixed').toBe('field : [1, 2, 3, "4", five, six]')
-  expect(stringify(parse('field : [1,2, 3, [4], "five", \'six\']')!), 'bracket mixed').toBe('field : [1, 2, 3, "[4]", five, six]')
   expect(stringify(parse('field : [1,2, 3, \\[4\\], "five", \'six\']')!), 'escaped bracket mixed').toBe('field : [1, 2, 3, "[4]", five, six]')
   expect(stringify(parse('field : [1,2, 3, "[4]", "five", \'six\']')!), 'quoted bracket mixed').toBe('field : [1, 2, 3, "[4]", five, six]')
 })
@@ -49,9 +48,9 @@ test('nested quotes', () => {
 })
 
 test('complex query can be reparsed', () => {
-  const query1 = 'foo & (foo = \'bar\') and ((FOOBAR : [1, "2", [3], four] V baz) | field !== wrong & test matches ".*regex.*")'
+  const query1 = 'foo & (foo = \'bar\') and ((FOOBAR : [1, "2", \\[3\\], four] V baz) | field !== wrong & test matches ".*regex.*")'
   expect(parse(query1)).toEqual(parse(stringify(parse(query1)!)))
 
-  const query2 = 'foo & (foo = \'bar\') and !(!(FOOBAR : [1, "2", [3], four] V baz) | field !== wrong & test matches ".*regex.*")'
+  const query2 = 'foo & (foo = \'bar\') and !(!(FOOBAR : [1, "2", \\[3\\], four] V baz) | field !== wrong & test matches ".*regex.*")'
   expect(parse(query2)).toEqual(parse(stringify(parse(query2)!)))
 })

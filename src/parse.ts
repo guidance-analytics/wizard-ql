@@ -556,12 +556,18 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
 
         let workingEntry = ''
         function resolveEntry (): void {
-          const {
-            unquoted: unquotedWorkingEntry,
-            unescaped: unescapedWorkingEntry
-          } = processToken(workingEntry)
-
           if (workingEntry) {
+            const {
+              unquoted: unquotedWorkingEntry,
+              unescaped: unescapedWorkingEntry
+            } = processToken(workingEntry)
+
+            if (
+              !unquotedWorkingEntry && (
+                (token.content === '[' && workingEntry.match(new RegExp(`${ESCAPE_REGEX}(?:\\[|\\])`))) ||
+                (token.content === '{' && workingEntry.match(new RegExp(`${ESCAPE_REGEX}(?:\\{|\\})`)))
+              )
+            ) throw new ParseError('Unescaped bracket in an array value', token, _offset + t, tokens[closingIndex]!, _offset + closingIndex)
             arr.push(parseValue(unescapedWorkingEntry, unquotedWorkingEntry !== undefined))
             workingEntry = ''
           }

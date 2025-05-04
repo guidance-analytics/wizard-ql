@@ -231,6 +231,8 @@ test('invalid operands', () => {
   expect(() => parse('field in []'), 'no array entries').toThrow(ParseError)
   expect(() => parse('field in []'), 'no array entries').toThrow('Token #2 -> #3 (char 9 -> 10 "[" -> "]"): Empty array provided as value')
   expect(() => parse('[entry] = bar'), 'array as field').toThrow(ParseError)
+  expect(() => parse('foo in {{}, 1}'), 'brackets in array value').toThrow(ParseError)
+  expect(() => parse('foo in [{}, 1]'), 'allowed brackets in array value').not.toThrow()
 })
 
 test('unclosed closures', () => {
