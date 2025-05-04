@@ -1,4 +1,4 @@
-import { ESCAPE_REGEX } from './regex'
+import { TOKEN_REGEX } from './parse'
 import type { Expression, JunctionOperation, Operation, Primitive } from './spec'
 
 export interface StringifyOptions {
@@ -74,19 +74,18 @@ const formats = {
 /**
  * Add quotes to a string value if it resembles another primitive
  * @param value The value
- * @returns     The value, possibly quoted
+ * @returns     The value, possibly quoted, stringified
  */
-function addQuotesIfNecessary (value: Primitive): Primitive {
-  if (typeof value !== 'string') return value
+function addQuotesIfNecessary (value: Primitive): string {
+  if (typeof value !== 'string') return value.toString()
 
-  const number = Number(value)
-  return isNaN(number) && !value.match(`${ESCAPE_REGEX}[[\\]()]`)
-    ? value === 'true'
-      ? '"true"'
-      : value === 'false'
-        ? '"false"'
-        : value.replaceAll('"', '\\"')
-    : `"${value.replaceAll('"', '\\"')}"`
+  if (value === 'true') return '"true"'
+  if (value === 'false') return '"false"'
+  if (!isNaN(Number(value))) return `"${value}"`
+
+  const escaped = value.replaceAll('\\', '\\\\')
+  if (new RegExp(TOKEN_REGEX, 'gi').test(escaped)) return `"${escaped.replaceAll('"', '\\"')}"`
+  return escaped
 }
 
 /**
@@ -137,7 +136,7 @@ export function stringify (
           const join = expression.value.map(addQuotesIfNecessary).join(compact ? ',' : ', ')
 
           string += `[${join}]`
-        } else string += addQuotesIfNecessary(expression.value).toString()
+        } else string += addQuotesIfNecessary(expression.value)
       }
 
       break

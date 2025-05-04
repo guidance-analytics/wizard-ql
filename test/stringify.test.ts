@@ -43,12 +43,17 @@ test('arrays', () => {
 })
 
 test('nested quotes', () => {
-  expect(stringify(parse('field = "\\"foo\\""')!), 'basic nested quotes').toBe('field = \\"foo\\"')
+  expect(stringify(parse('field = "\\"foo\\""')!), 'basic nested quotes').toBe('field = "\\"foo\\""')
   expect(stringify(parse('field : [1,2, 3, "[\\"4]", "five", \'six\']')!), 'quoted bracket mixed with quote').toBe('field : [1, 2, 3, "[\\"4]", five, six]')
 })
 
-test.todo('escapes', () => {
+test('escapes', () => {
   // backslashes, quotes, spaces
+  expect(stringify(parse('foo = \\\\bar')!), 'backslashes').toBe('foo = \\\\bar')
+  expect(stringify(parse('foo = \'"bar"\'')!), 'hardquotes').toBe('foo = "\\"bar\\""')
+  expect(stringify(parse('foo = bar \\or baz')!), 'escaped operator').toBe('foo = "bar or baz"')
+  expect(stringify(parse('foo = bar\\ or baz')!), 'escaped space').toBe('foo = "bar or baz"')
+  expect(stringify(parse('foo = "123"')!), 'quoted number').toBe('foo = "123"')
 })
 
 test('complex query can be reparsed', () => {

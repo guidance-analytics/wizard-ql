@@ -19,7 +19,7 @@ import {
 
 import { ConstraintError, ParseError } from './errors'
 
-const TOKEN_REGEX = new RegExp(createTokenRegexString(), 'g')
+export const TOKEN_REGEX = new RegExp(createTokenRegexString(), 'g')
 export const QUOTE_REGEX = new RegExp(createQuoteRegexString())
 export const QUOTE_EDGE_REGEX = new RegExp(`^${createQuoteRegexString()}$`)
 
@@ -80,7 +80,7 @@ function _tokenize (expression: string, pattern: RegExp): Token[] {
       }
 
       const subtokens = endToken
-        ? _tokenize(expression.slice(startToken.index + startToken.content.length, endToken.index), new RegExp(`${createQuoteRegexString()}|,`, 'g'))
+        ? _tokenize(expression.slice(startToken.index + startToken.content.length, endToken.index), new RegExp(`${createQuoteRegexString()}|${ESCAPE_REGEX},`, 'g'))
         : _tokenize(expression.slice(startToken.index + startToken.content.length), TOKEN_REGEX)
 
       for (const subtoken of subtokens) subtoken.index += match.index + 1
@@ -257,7 +257,7 @@ function validateCondition<T extends TypeRecord> (condition: Omit<UncheckedCondi
   else if (Array.isArray(restriction)) {
     for (const entry of restriction) {
       if (entry instanceof RegExp) {
-        if (values.some((v) => v.toString().match(entry))) throw new ConstraintError<false>(`Value for field "${condition.field}" violates constraint "${entry.toString()}"`)
+        if (values.some((v) => entry.test(v.toString()))) throw new ConstraintError<false>(`Value for field "${condition.field}" violates constraint "${entry.toString()}"`)
       } else {
         if (values.includes(entry)) throw new ConstraintError<false>(`Forbidden value "${entry}" for field "${condition.field}"`)
       }
@@ -637,8 +637,8 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
             if (subquotes && (subquotes.index !== 0 || subquotes[0].length !== workingEntry.length)) throw new ParseError('Quotes must surround entire values in arrays', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
             if (
               !unquotedWorkingEntry && (
-                (token.content === '[' && workingEntry.match(new RegExp(`${ESCAPE_REGEX}(?:\\[|\\])`))) ||
-                (token.content === '{' && workingEntry.match(new RegExp(`${ESCAPE_REGEX}(?:\\{|\\})`)))
+                (token.content === '[' && new RegExp(`${ESCAPE_REGEX}(?:\\[|\\])`).test(workingEntry)) ||
+                (token.content === '{' && new RegExp(`${ESCAPE_REGEX}(?:\\{|\\})`).test(workingEntry))
               )
             ) throw new ParseError('Unescaped bracket in an array value', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
 

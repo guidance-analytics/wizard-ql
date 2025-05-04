@@ -30,7 +30,7 @@ export function createTokenRegexString (): string {
     const escaped = RegExp.escape(alias)
 
     return isAlpha
-      ? `(?<=\\s|^)${escaped}(?=\\s|$)`
+      ? `(?<=${ESCAPE_REGEX}\\s|^)${escaped}(?=${ESCAPE_REGEX}\\s|$)`
       : `${ESCAPE_REGEX}${escaped}`
   })
 
