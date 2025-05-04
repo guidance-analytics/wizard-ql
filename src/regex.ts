@@ -1,6 +1,6 @@
 import { ALIASES } from './spec'
 
-export const ESCAPE_REGEX = '(?<!(?<!\\\\)\\\\)'
+export const ESCAPE_REGEX = '(?<=(?<!\\\\)(?:\\\\\\\\)*)'
 const QUOTES = ['\'', '"', '`']
 const QUOTE_TOKEN_REGEX_STR = `${ESCAPE_REGEX}(?<quote>${QUOTES.map((q) => RegExp.escape(q)).join('|')})(?<quotecontent>.*?)${ESCAPE_REGEX}\\k<quote>`
 

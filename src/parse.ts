@@ -1,4 +1,5 @@
-import { createTokenRegexString, createQuoteEdgeRegexString } from './regex' with { type: 'macro' }
+import { createTokenRegexString, createQuoteEdgeRegexString } from './regex' with { type: 'macro' } // eslint-disable-line import-x/no-duplicates
+import { ESCAPE_REGEX } from './regex' // eslint-disable-line import-x/no-duplicates
 import {
   type CheckedConditionSpread,
   type ComparisonOperation,
@@ -89,7 +90,7 @@ function processToken (token: string): {
 } {
   const unquoted = token.match(QUOTE_EDGE_REGEX)?.groups?.quotecontent
   const escaped = unquoted ?? token
-  const unescaped = escaped.replaceAll(/(?<!\\)\\/g, '')
+  const unescaped = escaped.replaceAll(new RegExp(`(?<!${ESCAPE_REGEX}\\\\)\\\\`, 'g'), '')
 
   return {
     unquoted,
@@ -323,8 +324,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
         else throw new ParseError<false>('Failed to resolve condition; missing operand or operator')
       }
     } catch (err) {
-      if (err instanceof ConstraintError) throw new ConstraintError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
-      else throw err
+      if (err instanceof ConstraintError) {
+        const clone = new ConstraintError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
+        clone.stack = err.stack
+        throw clone
+      } else throw err
     }
 
     field = undefined
@@ -358,7 +362,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
             group.push(subExpression)
             inConjunction = false
           } catch (err) {
-            throw new ParseError((err as ParseError).rawMessage, token, _offset + t)
+            if (err instanceof ParseError) {
+              const clone = new ParseError((err as ParseError).rawMessage, token, _offset + t)
+              clone.stack = err.stack
+              throw clone
+            } else throw err
           }
         }
       }
@@ -373,8 +381,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
       try {
         resolveCondition(true)
       } catch (err) {
-        if (err instanceof ParseError) throw new ParseError(err.rawMessage, field!.token, field!.index, token, _offset + t)
-        else throw err
+        if (err instanceof ParseError) {
+          const clone = new ParseError(err.rawMessage, field!.token, field!.index, token, _offset + t)
+          clone.stack = err.stack
+          throw clone
+        } else throw err
       }
 
       const prior = expressions.at(-1)
@@ -436,8 +447,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
         try {
           resolveCondition()
         } catch (err) {
-          if (err instanceof ParseError) throw new ParseError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
-          else throw err
+          if (err instanceof ParseError) {
+            const clone = new ParseError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
+            clone.stack = err.stack
+            throw clone
+          } else throw err
         }
 
         const closingIndex = getClosingIndex(tokens, t + 1, '(', ')')
@@ -474,8 +488,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
         try {
           resolveCondition()
         } catch (err) {
-          if (err instanceof ParseError) throw new ParseError(err.rawMessage, token, _offset + t - 1)
-          else throw err
+          if (err instanceof ParseError) {
+            const clone = new ParseError(err.rawMessage, token, _offset + t - 1)
+            clone.stack = err.stack
+            throw clone
+          } else throw err
         }
 
         field = {
@@ -493,8 +510,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
         try {
           resolveCondition()
         } catch (err) {
-          if (err instanceof ParseError) throw new ParseError(err.rawMessage, field.token, field.index, nextToken, _offset + t)
-          else throw err
+          if (err instanceof ParseError) {
+            const clone = new ParseError(err.rawMessage, field.token, field.index, nextToken, _offset + t)
+            clone.stack = err.stack
+            throw clone
+          } else throw err
         }
       } else {
         field = {
@@ -509,28 +529,16 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
 
     if (!comparisonOperation || (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison')) {
       if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison') {
+        if (comparisonOperation) throw new ParseError('Unexpected comparison operator', field.token, field.index, token, _offset + t)
+
         comparisonOperation = {
           content: op as ComparisonOperation,
           token,
           index: _offset + t
         }
-      } else {
-        comparisonOperation = {
-          content: 'EQUAL'
-        }
-        value = {
-          content: true
-        }
 
-        try {
-          resolveCondition()
-        } catch (err) {
-          if (err instanceof ParseError) throw new ParseError(err.rawMessage, field.token, field.index)
-          else throw err
-        }
-      }
-
-      continue
+        continue
+      } else throw new ParseError('Expected a comparison operator', field.token, field.index, token, _offset + t)
     }
 
     if (!value) {
@@ -586,8 +594,11 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
       try {
         resolveCondition()
       } catch (err) {
-        if (err instanceof ParseError) throw new ParseError(err.rawMessage, field.token, field.index, value.token ?? comparisonOperation.token ?? field.token, value.index ?? comparisonOperation.index ?? field.index)
-        else throw err
+        if (err instanceof ParseError) {
+          const clone = new ParseError(err.rawMessage, field.token, field.index, value.token ?? comparisonOperation.token ?? field.token, value.index ?? comparisonOperation.index ?? field.index)
+          clone.stack = err.stack
+          throw clone
+        } else throw err
       }
     }
   }

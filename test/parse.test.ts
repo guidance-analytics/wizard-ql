@@ -215,6 +215,14 @@ test('escaped parsing', () => {
     value: ['entry, 1', 'entry 2', '\'entry 3\''],
     validated: false
   })
+
+  expect(parse('field : [\\\\\\\\"string", "string\\\\\\"]'), 'excessive escaping').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'IN',
+    value: ['\\\\"string"', '"string\\"'],
+    validated: false
+  })
 })
 
 test('invalid operands', () => {
@@ -427,6 +435,7 @@ test('basic parsing errors', () => {
   expect(() => parse('operation = ='), 'double equal').toThrow(ParseError)
   expect(() => parse('operation = \\='), 'double equal with escape doesnt throw').not.toThrow()
   expect(() => parse('operation = "="'), 'double equal with quotes doesnt throw').not.toThrow()
+  expect(() => parse('"field" "unknown" = foo'), 'two tokens for field').toThrow(ParseError)
 })
 
 test('group disjunction', () => {

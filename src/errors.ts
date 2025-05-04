@@ -40,17 +40,17 @@ function constructHeader (startToken: Token | undefined, startIndex: number | un
  * A WizardQL string expression parsing error
  */
 export class ParseError<Filled extends boolean = true> extends Error {
-  name = 'ParseError' as const
+  readonly name = 'ParseError' as const
   /** The message without the header */
-  rawMessage: string
+  readonly rawMessage: string
   /** The first token this error pertains to */
-  startToken: Filled extends true ? Token : Token | undefined
+  readonly startToken: Filled extends true ? Token : Token | undefined
   /** The last token this error pertains to */
-  endToken: Filled extends true ? Token : Token | undefined
+  readonly endToken: Filled extends true ? Token : Token | undefined
   /** The start token index */
-  startIndex: Filled extends true ? number : number | undefined
+  readonly startIndex: Filled extends true ? number : number | undefined
   /** The end token index */
-  endIndex: Filled extends true ? number : number | undefined
+  readonly endIndex: Filled extends true ? number : number | undefined
 
   // @ts-expect-error
   constructor (message: Filled extends true ? never : string) // eslint-disable-line jsdoc/require-jsdoc
@@ -93,17 +93,17 @@ export class ParseError<Filled extends boolean = true> extends Error {
  * A WizardQL string expression parsing constraint error
  */
 export class ConstraintError<Filled extends boolean = true> extends Error {
-  name = 'ConstraintError' as const
+  readonly name = 'ConstraintError' as const
   /** The message without the header */
-  rawMessage: string
+  readonly rawMessage: string
   /** The first token this error pertains to */
-  startToken: Filled extends true ? Token : Token | undefined
+  readonly startToken: Filled extends true ? Token : Token | undefined
   /** The last token this error pertains to */
-  endToken: Filled extends true ? Token : Token | undefined
+  readonly endToken: Filled extends true ? Token : Token | undefined
   /** The start token index */
-  startIndex: Filled extends true ? number : number | undefined
+  readonly startIndex: Filled extends true ? number : number | undefined
   /** The end token index */
-  endIndex: Filled extends true ? number : number | undefined
+  readonly endIndex: Filled extends true ? number : number | undefined
 
   // @ts-expect-error
   constructor (message: Filled extends true ? never : string) // eslint-disable-line jsdoc/require-jsdoc
