@@ -14,6 +14,7 @@ test('tokenization', () => {
     'field\\\\= value': ['field\\\\', '=', 'value'],
     '\'field WITH spaces\' isnt        "value with  spaces"': ['\'field WITH spaces\'', 'ISNT', '"value with  spaces"'],
     'array_field : [value1\\ spaced , "value2"]': ['array_field', ':', '[', 'value1\\ spaced', ',', '"value2"', ']'],
+    '1 NOtIN [2,3]': ['1', 'NOTIN', '[', '2', ',', '3', ']'],
     '1 NOtIN 2,3': ['1', 'NOTIN', '2', ',', '3'],
     '"field" = "\'value  "': ['"field"', '=', '"\'value  "'],
     '"field" = va\\"lue\\"': ['"field"', '=', 'va\\"lue\\"']
@@ -216,11 +217,19 @@ test('escaped parsing', () => {
     validated: false
   })
 
-  expect(parse('field : [\\\\\\\\"string", "string\\\\\\"]'), 'excessive escaping').toEqual({
+  expect(parse('field : ["string\\\\\\\\", "string\\\\\\""]'), 'excessive escaping').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'IN',
-    value: ['\\\\"string"', '"string\\"'],
+    value: ['string\\\\', 'string\\"'],
+    validated: false
+  })
+
+  expect(parse('field : [first : second, third]'), 'operator in value').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'IN',
+    value: ['first : second', 'third'],
     validated: false
   })
 })
@@ -233,6 +242,7 @@ test('invalid operands', () => {
   expect(() => parse('[entry] = bar'), 'array as field').toThrow(ParseError)
   expect(() => parse('foo in {{}, 1}'), 'brackets in array value').toThrow(ParseError)
   expect(() => parse('foo in [{}, 1]'), 'allowed brackets in array value').not.toThrow()
+  expect(() => parse('foo in [\'value\' unseparated, othervalue]'), 'non-surrounding string in array').toThrow(ParseError)
 })
 
 test('unclosed closures', () => {

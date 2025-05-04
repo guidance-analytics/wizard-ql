@@ -9,7 +9,6 @@ import type { Token } from './spec'
  * @returns          The header
  */
 function constructHeader (startToken: Token | undefined, startIndex: number | undefined, endToken: Token | undefined, endIndex: number | undefined): string {
-  // const header = `Token #${startIndex === -1 ? '??' : startIndex} -> #${endIndex === -1 ? '??' : endIndex} (${startToken?.index ?? '??'} -> ${endToken?.index ?? '??'} "${startToken?.content ?? '???'}" -> "${endToken?.content}"): `
   let header = 'Token #'
   header += startIndex === undefined ? '??' : startIndex
   if (endIndex !== undefined && endIndex !== startIndex) header += ' -> #' + endIndex
@@ -23,9 +22,9 @@ function constructHeader (startToken: Token | undefined, startIndex: number | un
 
     header += ' "'
 
-    header += startToken.content
+    header += startToken.content.replaceAll('"', '\\"')
     if (endToken && endToken !== startToken) {
-      header += '" -> "' + endToken.content
+      header += '" -> "' + endToken.content.replaceAll('"', '\\"')
     }
 
     header += '"'

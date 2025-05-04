@@ -2,14 +2,14 @@ import { ALIASES } from './spec'
 
 export const ESCAPE_REGEX = '(?<=(?<!\\\\)(?:\\\\\\\\)*)'
 const QUOTES = ['\'', '"', '`']
-const QUOTE_TOKEN_REGEX_STR = `${ESCAPE_REGEX}(?<quote>${QUOTES.map((q) => RegExp.escape(q)).join('|')})(?<quotecontent>.*?)${ESCAPE_REGEX}\\k<quote>`
+const QUOTE_REGEX_STR = `${ESCAPE_REGEX}(?<quote>${QUOTES.map((q) => RegExp.escape(q)).join('|')})(?<quotecontent>.*?)${ESCAPE_REGEX}\\k<quote>`
 
 /**
  * Create a Regex to look for quotes
  * @returns The regular expression
  */
-export function createQuoteEdgeRegexString (): string {
-  return `^${QUOTE_TOKEN_REGEX_STR}$`
+export function createQuoteRegexString (): string {
+  return QUOTE_REGEX_STR
 }
 
 /**
@@ -17,7 +17,7 @@ export function createQuoteEdgeRegexString (): string {
  * @returns The regular expression
  */
 export function createTokenRegexString (): string {
-  const pieces = ALIASES.concat(['(', ')', '[', ']', '{', '}', ',', '!']).map((alias) => {
+  const tokens = ALIASES.concat(['(', ')', '[', ']', '{', '}', ',', '!']).map((alias) => {
     let isAlpha = true
     for (let c = 0; c < alias.length; ++c) {
       const char = alias.charCodeAt(c)
@@ -31,11 +31,10 @@ export function createTokenRegexString (): string {
 
     return isAlpha
       ? `(?<=\\s|^)${escaped}(?=\\s|$)`
-      : `(?<!(?<!\\\\)\\\\)${escaped}`
+      : `${ESCAPE_REGEX}${escaped}`
   })
-  const inner = `(?:${QUOTE_TOKEN_REGEX_STR}|${pieces.join('|')})`
 
-  // const lookasides = `(?:(?=${inner})|(?<=${inner}))`
+  const full = `${QUOTE_REGEX_STR}|${tokens.join('|')}`
 
-  return inner
+  return full
 }

@@ -1,4 +1,4 @@
-import { createTokenRegexString, createQuoteEdgeRegexString } from './regex' with { type: 'macro' } // eslint-disable-line import-x/no-duplicates
+import { createTokenRegexString, createQuoteRegexString } from './regex' with { type: 'macro' } // eslint-disable-line import-x/no-duplicates
 import { ESCAPE_REGEX } from './regex' // eslint-disable-line import-x/no-duplicates
 import {
   type CheckedConditionSpread,
@@ -20,21 +20,96 @@ import {
 import { ConstraintError, ParseError } from './errors'
 
 const TOKEN_REGEX = new RegExp(createTokenRegexString(), 'g')
-export const QUOTE_EDGE_REGEX = new RegExp(createQuoteEdgeRegexString())
+export const QUOTE_REGEX = new RegExp(createQuoteRegexString())
+export const QUOTE_EDGE_REGEX = new RegExp(`^${createQuoteRegexString()}$`)
 
 /**
  * Take a string, sanitize it, and push it to an array if it has a length
  * @param array The array to push to
  * @param item  The item to sanitize and push
  * @param index The index of the token in the original string
+ * @returns     The token, if pushed
  */
-function pushSanitized (array: Token[], item: string, index: number): void {
+function pushSanitized (array: Token[], item: string, index: number): Token | undefined {
   let trimmed = item.trimEnd()
   const pretrimLength = trimmed.length
   trimmed = trimmed.trimStart()
   const lengthDiff = trimmed.length - pretrimLength
 
-  if (trimmed) array.push({ content: trimmed, index: index - lengthDiff })
+  if (trimmed) {
+    const token = { content: trimmed, index: index - lengthDiff }
+    array.push(token)
+    return token
+  }
+}
+
+/**
+ * Take a string and tokenize it for parsing with a specific pattern
+ * @param expression The expression to tokenize
+ * @param pattern    The tokenization pattern
+ * @returns          An array of tokens
+ */
+function _tokenize (expression: string, pattern: RegExp): Token[] {
+  const tokens: Token[] = []
+  const matches = expression.toUpperCase().matchAll(pattern)
+
+  let lastMatchEnd: number | null = null
+  for (const match of matches) {
+    pushSanitized(tokens, expression.slice(lastMatchEnd ?? 0, match.index), lastMatchEnd === null ? 0 : lastMatchEnd)
+
+    if (['[', '{'].includes(match[0])) {
+      const startToken = {
+        content: match[0],
+        index: match.index
+      }
+      tokens.push(startToken)
+
+      let endToken: Token | undefined
+      for (const submatch of matches) {
+        if (
+          (match[0] === '[' && submatch[0] === ']') ||
+          (match[0] === '{' && submatch[0] === '}')
+        ) {
+          endToken = {
+            content: submatch[0],
+            index: submatch.index
+          }
+
+          break
+        }
+      }
+
+      const subtokens = endToken
+        ? _tokenize(expression.slice(startToken.index + startToken.content.length, endToken.index), new RegExp(`${createQuoteRegexString()}|,`, 'g'))
+        : _tokenize(expression.slice(startToken.index + startToken.content.length), TOKEN_REGEX)
+
+      for (const subtoken of subtokens) subtoken.index += match.index + 1
+      tokens.push(...subtokens)
+      if (endToken) {
+        tokens.push(endToken)
+        lastMatchEnd = endToken.index + endToken.content.length
+      } else {
+        // Assume we reached the end of the matches in the subiteration
+        lastMatchEnd = expression.length
+        break
+      }
+
+      continue
+    } else {
+      pushSanitized(
+        tokens,
+        match.groups?.quotecontent !== undefined
+          ? expression.slice(match.index, match.index + match[0].length) // This isn't a real token and is a string; don't append its uppercase version
+          : match[0],
+        match.index
+      )
+    }
+
+    lastMatchEnd = match.index + match[0].length
+  }
+  pushSanitized(tokens, expression.slice(lastMatchEnd ?? 0), lastMatchEnd ?? 0)
+
+  return tokens
 }
 
 /**
@@ -43,25 +118,7 @@ function pushSanitized (array: Token[], item: string, index: number): void {
  * @returns          An array of tokens
  */
 export function tokenize (expression: string): Token[] {
-  const tokens: Token[] = []
-  const indices = expression.toUpperCase().matchAll(TOKEN_REGEX)
-
-  let lastMatchEnd: number | null = null
-  for (const match of indices) {
-    pushSanitized(tokens, expression.slice(lastMatchEnd ?? 0, match.index), lastMatchEnd === null ? 0 : lastMatchEnd)
-
-    pushSanitized(
-      tokens,
-      match[0].match(QUOTE_EDGE_REGEX)
-        ? expression.slice(match.index, match.index + match[0].length) // This isn't a real token and is a string; don't append its uppercase version
-        : match[0],
-      match.index
-    )
-    lastMatchEnd = match.index + match[0].length
-  }
-  pushSanitized(tokens, expression.slice(lastMatchEnd ?? 0), lastMatchEnd ?? 0)
-
-  return tokens
+  return _tokenize(expression, TOKEN_REGEX)
 }
 
 /**
@@ -249,7 +306,7 @@ function validateCondition<T extends TypeRecord> (condition: Omit<UncheckedCondi
  * Parse tokens into an object expression
  * @template T A type record, mapping field names to their types
  * @param                                  tokens      The tokens to parse into an object expression
- * @param                                  _offset     THe token offset
+ * @param                                  _offset     The token offset
  * @param                                  constraints Constraints to add on parsing such as forced types or restricted columns
  * @returns                                            An expression
  * @throws  {ParseError | ConstraintError}
@@ -351,8 +408,9 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
 
       const closingIndex = getClosingIndex(tokens, t, '(', ')')
       if (closingIndex === -1) throw new ParseError('Missing closing parenthesis for group', token, _offset + t)
+      ++t
 
-      const subExpression = _parse(tokens.slice(t + 1, closingIndex), t + 1, constraints)
+      const subExpression = _parse(tokens.slice(t, closingIndex), _offset + t, constraints)
       // Simplification
       if (subExpression) {
         if (subExpression.type === 'group' && subExpression.operation === groupOperation) expressions.push(...subExpression.constituents)
@@ -363,7 +421,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
             inConjunction = false
           } catch (err) {
             if (err instanceof ParseError) {
-              const clone = new ParseError((err as ParseError).rawMessage, token, _offset + t)
+              const clone = new ParseError(`Error while parsing group: ${err.message}`, token, _offset + t)
               clone.stack = err.stack
               throw clone
             } else throw err
@@ -454,10 +512,14 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
           } else throw err
         }
 
-        const closingIndex = getClosingIndex(tokens, t + 1, '(', ')')
+        ++t
+
+        const closingIndex = getClosingIndex(tokens, t, '(', ')')
         if (closingIndex === -1) throw new ParseError('Missing closing parenthesis for group', token, _offset + t)
 
-        const futureSubExpression = _parse(tokens.slice(t + 2, closingIndex), t + 2, constraints)
+        ++t
+
+        const futureSubExpression = _parse(tokens.slice(t, closingIndex), _offset + t, constraints)
         if (futureSubExpression) {
           complementExpression(futureSubExpression)
 
@@ -482,18 +544,20 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
 
     if (!field) {
       if (token.content === '!') {
-        const nextToken = tokens[++t]
-        if (!nextToken) throw new ParseError('Unexpected "!"', token, _offset + t - 1)
+        const nextToken = tokens[t + 1]
+        if (!nextToken) throw new ParseError('Unexpected "!"', token, _offset + t)
 
         try {
           resolveCondition()
         } catch (err) {
           if (err instanceof ParseError) {
-            const clone = new ParseError(err.rawMessage, token, _offset + t - 1)
+            const clone = new ParseError(err.rawMessage, token, _offset)
             clone.stack = err.stack
             throw clone
           } else throw err
         }
+
+        ++t
 
         field = {
           content: processToken(nextToken.content).unescaped,
@@ -546,30 +610,44 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
         const closingIndex = getClosingIndex(tokens, t, token.content, token.content === '[' ? ']' : '}')
         if (closingIndex === -1) throw new ParseError('Missing closing bracket/brace for array value', token, _offset + t)
 
+        ++t
+
         const arr: Primitive[] = []
         value = {
           content: arr,
           token: tokens[closingIndex],
           index: closingIndex
         }
-        const arrayContents = tokens.slice(t + 1, closingIndex)
+        const arrayContents = tokens.slice(t, closingIndex)
 
         let workingEntry = ''
-        function resolveEntry (): void {
+        let firstEntryToken: Token | undefined
+        let firstEntryTokenIndex: number | undefined
+        let lastEntryToken: Token | undefined
+        let lastEntryTokenIndex: number | undefined
+
+        function resolveEntry (subtoken: Token, subindex: number): void {
           if (workingEntry) {
             const {
               unquoted: unquotedWorkingEntry,
               unescaped: unescapedWorkingEntry
             } = processToken(workingEntry)
 
+            const subquotes = workingEntry.match(QUOTE_REGEX)
+            if (subquotes && (subquotes.index !== 0 || subquotes[0].length !== workingEntry.length)) throw new ParseError('Quotes must surround entire values in arrays', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
             if (
               !unquotedWorkingEntry && (
                 (token.content === '[' && workingEntry.match(new RegExp(`${ESCAPE_REGEX}(?:\\[|\\])`))) ||
                 (token.content === '{' && workingEntry.match(new RegExp(`${ESCAPE_REGEX}(?:\\{|\\})`)))
               )
-            ) throw new ParseError('Unescaped bracket in an array value', token, _offset + t, tokens[closingIndex]!, _offset + closingIndex)
+            ) throw new ParseError('Unescaped bracket in an array value', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
+
             arr.push(parseValue(unescapedWorkingEntry, unquotedWorkingEntry !== undefined))
             workingEntry = ''
+            firstEntryToken = undefined
+            firstEntryTokenIndex = undefined
+            lastEntryToken = undefined
+            lastEntryTokenIndex = undefined
           }
         }
 
@@ -579,13 +657,19 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
           if (contentToken.content === ',') {
             if (!workingEntry) throw new ParseError('Unexpected blank entry in array', contentToken, _offset + t + ct)
 
-            resolveEntry()
-          } else workingEntry += contentToken.content
+            resolveEntry(contentToken, _offset + t + ct)
+          } else {
+            lastEntryToken = contentToken
+            lastEntryTokenIndex = _offset + t + ct
+            if (!firstEntryToken) firstEntryToken = lastEntryToken
+            if (!firstEntryTokenIndex) firstEntryTokenIndex = lastEntryTokenIndex
+            workingEntry += contentToken.content
+          }
         }
-        resolveEntry()
+        resolveEntry(arrayContents.at(-1)!, _offset + t + arrayContents.length - 1)
 
         if (!arr.length) {
-          throw new ParseError('Empty array provided as value', token, _offset + t, tokens[closingIndex]!, _offset + closingIndex)
+          throw new ParseError('Empty array provided as value', token, _offset + t - 1, tokens[closingIndex]!, _offset + closingIndex)
         }
 
         t = closingIndex
