@@ -224,6 +224,12 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
   restricted?: Partial<Record<keyof T | (string & {}), boolean | ['allow' | 'deny', Array<boolean | string | number | RegExp>]>>
 
   /**
+   * The types of fields\
+   * Either provide the field type singularly or permit multiple types with an array of field types
+   */
+  types?: T
+
+  /**
    * Restriction checks and type checks are case insensitive
    * @note If this is enabled, the keys in the restricted record and type record must be all lowercase
    * @note If enabled, all field will be returned as lowercase
@@ -231,15 +237,9 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
   caseInsensitive?: boolean
 
   /**
-   * Disallow fields that are not present in the "restricted" record
+   * Disallow fields that are not present in the "restricted" record or the "types" record
    */
   disallowUnvalidated?: V
-
-  /**
-   * The types of fields\
-   * Either provide the field type singularly or permit multiple types with an array of field types
-   */
-  types?: T
 }
 
 /**
@@ -254,8 +254,9 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
 function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
   const restriction = constraints?.restricted?.[condition.field]
+  const type = constraints?.types?.[condition.field]
 
-  if (constraints?.disallowUnvalidated && restriction === undefined) throw new ConstraintError<false>(`Unknown field "${condition.field}"`)
+  if (constraints?.disallowUnvalidated && restriction === undefined && type === undefined) throw new ConstraintError<false>(`Unknown field "${condition.field}"`)
 
   const values = Array.isArray(condition.value) ? condition.value : [condition.value]
 
@@ -299,7 +300,6 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   if (!operationAllowed) throw new ConstraintError<false>(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`)
 
   // Check if the value matches the constrained type
-  const type = constraints?.types?.[condition.field]
   if (type) {
     const types = Array.isArray(type) ? type : [type]
 

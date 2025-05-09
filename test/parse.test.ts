@@ -922,4 +922,18 @@ test('restriction constraints', () => {
     },
     disallowUnvalidated: true
   }), 'disallow unvalidated unknown field').toThrow(ConstraintError)
+
+  expect(() => parse('plural in [cow, dog, cats, pig] and unknown matches .{3} or singular = bar', {
+    types: {
+      plural: ['string']
+    },
+    disallowUnvalidated: true
+  }), 'present in types throws').toThrow(ConstraintError)
+
+  expect(() => parse('plural in [cow, dog, cats, pig] or plural = bar', {
+    types: {
+      plural: ['string']
+    },
+    disallowUnvalidated: true
+  }), 'present in types not throws').not.toThrow()
 })
