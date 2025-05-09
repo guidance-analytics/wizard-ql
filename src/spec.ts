@@ -130,12 +130,12 @@ export type ConvertTypeRecord<T extends TypeRecord> = {
  * A group of conditions joined by a junction operator
  * @template R A record mapping field names to values
  */
-export interface Group<R extends Record<string, Primitive> = Record<string, Primitive>> {
+export interface Group<R extends Record<string, Primitive> = Record<string, Primitive>, V extends boolean = false> {
   type: 'group'
   /** The junction operator */
   operation: JunctionOperation
   /** The members of the group */
-  constituents: Array<Expression<R>>
+  constituents: Array<Expression<R, V>>
 }
 /**
  * A query on a field, validated by type constraints
@@ -187,4 +187,7 @@ export type UncheckedConditionSpread = {
   [O in keyof ReverseAggregatedTypes]: UncheckedCondition<ReverseAggregatedTypes[O]>
 }[keyof ReverseAggregatedTypes]
 
-export type Expression<R extends Record<string, Primitive> = Record<string, Primitive>> = Group<R> | CheckedConditionSpread<R> | UncheckedConditionSpread
+export type Expression<R extends Record<string, Primitive> = Record<string, Primitive>, V extends boolean = false> =
+  Group<R, V> | (V extends true
+    ? CheckedConditionSpread<R>
+    : CheckedConditionSpread<R> | UncheckedConditionSpread)

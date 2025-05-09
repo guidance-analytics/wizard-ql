@@ -898,4 +898,28 @@ test('restriction constraints', () => {
       plural: ['allow', [/[^s]$/, /^cats$/]]
     }
   }), 'prohibitive allowed regexing').not.toThrow()
+
+  expect(() => parse('plural in [cow, dog, cats, pig]', {
+    restricted: {
+      plural: ['allow', [/[^s]$/, /^cats$/]],
+      singular: ['deny', ['foo']]
+    },
+    disallowUnvalidated: true
+  }), 'disallow unvalidated allowed 1 exp').not.toThrow()
+
+  expect(() => parse('plural in [cow, dog, cats, pig] or singular = bar', {
+    restricted: {
+      plural: ['allow', [/[^s]$/, /^cats$/]],
+      singular: ['deny', ['foo']]
+    },
+    disallowUnvalidated: true
+  }), 'disallow unvalidated allowed 2 exps').not.toThrow()
+
+  expect(() => parse('plural in [cow, dog, cats, pig] and unknown matches .{3} or singular = bar', {
+    restricted: {
+      plural: ['allow', [/[^s]$/, /^cats$/]],
+      singular: ['deny', ['foo']]
+    },
+    disallowUnvalidated: true
+  }), 'disallow unvalidated unknown field').toThrow(ConstraintError)
 })

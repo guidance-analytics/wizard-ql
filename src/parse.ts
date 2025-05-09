@@ -1,17 +1,16 @@
 import { createTokenRegexString, createQuoteRegexString } from './regex' with { type: 'macro' } // eslint-disable-line import-x/no-duplicates
 import { ESCAPE_REGEX } from './regex' // eslint-disable-line import-x/no-duplicates
 import {
-  type CheckedConditionSpread,
   type ComparisonOperation,
   type ConvertTypeRecord,
   type Expression,
+  type Group,
   type JunctionOperation,
   type Operation,
   type Primitive,
   type Token,
   type TypeRecord,
   type UncheckedCondition,
-  type UncheckedConditionSpread,
   COMPARISON_TYPE_DICTIONARY,
   OPERATION_ALIAS_DICTIONARY,
   OPERATION_PURPOSE_DICTIONARY
@@ -180,7 +179,7 @@ function getClosingIndex (tokens: Token[], start: number, opening: string, closi
 }
 
 /**
- * Apply De Morgan's Law to an expression and complement it
+ * Apply De Morgan's Law to an expression and complement it\
  * (Mutating operation)
  * @param expression The expression
  */
@@ -213,33 +212,38 @@ function complementExpression<R extends Record<string, Primitive>> (expression: 
   }
 }
 
-export interface ExpressionConstraints<T extends TypeRecord> {
+export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> {
   /**
-   * Restricted fields.
-   * Restrict an entire field by setting it to true.
-   * By default allow any value and restrict a collection of values by passing ['deny', VALUES[]]
-   * By default restrict any value and allow a collection of values by passing ['allow', VALUES[]]
+   * Restricted fields.\
+   * Restrict an entire field by setting it to true.\
+   * By default allow any value and restrict a collection of values by passing ['deny', VALUES[]]\
+   * By default restrict any value and allow a collection of values by passing ['allow', VALUES[]]\
    * If the field query is of array type, it will check all entries of the array.
-   * @warn If 42 (the number) is prohibited, "42" the string will still be allowed
+   * @warn If 42 (the number) is prohibited, "42" (the string) will still be allowed
    */
   restricted?: Partial<Record<keyof T | (string & {}), boolean | ['allow' | 'deny', Array<boolean | string | number | RegExp>]>>
 
   /**
    * Restriction checks and type checks are case insensitive
    * @note If this is enabled, the keys in the restricted record and type record must be all lowercase
-   * @note Future, if enabled, all field will be returned as lowercase
+   * @note If enabled, all field will be returned as lowercase
    */
   caseInsensitive?: boolean
 
   /**
-   * The types of fields
+   * Disallow fields that are not present in the "restricted" record
+   */
+  disallowUnvalidated?: V
+
+  /**
+   * The types of fields\
    * Either provide the field type singularly or permit multiple types with an array of field types
    */
   types?: T
 }
 
 /**
- * Validate that a condition meets constraints
+ * Validate that a condition meets constraints\
  * This operation mutates the condition to apply the validated field
  * @template T A type record, mapping field names to their types
  * @param                            condition   The condition to validate
@@ -247,9 +251,11 @@ export interface ExpressionConstraints<T extends TypeRecord> {
  * @throws  {ConstraintError<false>}
  * @returns                                      The same reference to the condition
  */
-function validateCondition<T extends TypeRecord> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T> | undefined): UncheckedConditionSpread | CheckedConditionSpread<ConvertTypeRecord<T>> {
+function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
   const restriction = constraints?.restricted?.[condition.field]
+
+  if (constraints?.disallowUnvalidated && restriction === undefined) throw new ConstraintError<false>(`Unknown field "${condition.field}"`)
 
   const values = Array.isArray(condition.value) ? condition.value : [condition.value]
 
@@ -312,7 +318,7 @@ function validateCondition<T extends TypeRecord> (condition: Omit<UncheckedCondi
     validated = true
   }
 
-  const edit = condition as UncheckedConditionSpread | CheckedConditionSpread<ConvertTypeRecord<T>>
+  const edit = condition as ReturnType<typeof validateCondition<T, V>>
   edit.validated = validated
   return edit
 }
@@ -326,8 +332,8 @@ function validateCondition<T extends TypeRecord> (condition: Omit<UncheckedCondi
  * @returns                                            An expression
  * @throws  {ParseError | ConstraintError}
  */
-function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, constraints?: ExpressionConstraints<T>): Expression<ConvertTypeRecord<T>> | null {
-  type TypedExpression = Expression<ConvertTypeRecord<T>>
+function _parse<const T extends TypeRecord, const V extends boolean> (tokens: Token[], _offset: number, constraints?: ExpressionConstraints<T, V>): Expression<ConvertTypeRecord<T>, V> | null {
+  type TypedExpression = Expression<ConvertTypeRecord<T>, V>
   let field: {
     content: string
     token: Token
@@ -745,7 +751,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
  * @returns                                            The object representation
  * @throws  {ParseError | ConstraintError}
  */
-export function parse<const T extends TypeRecord> (expression: string | string[] | Token[], constraints?: ExpressionConstraints<T>): Expression<ConvertTypeRecord<T>> | null {
+export function parse<const T extends TypeRecord, const V extends boolean> (expression: string | string[] | Token[], constraints?: ExpressionConstraints<T, V>): Expression<ConvertTypeRecord<T>, V> | null {
   let tokens: Token[]
 
   if (Array.isArray(expression)) {

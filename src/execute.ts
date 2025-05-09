@@ -2,7 +2,7 @@ import type { Knex } from 'knex'
 import type { Expression } from './spec'
 
 /**
- * Execute a Wizard expression as a SQL query
+ * Execute a Wizard expression as a SQL query\
  * This mutates the passed query
  * @param query      The Knex query to append conditions to
  * @param expression The Wizard expression

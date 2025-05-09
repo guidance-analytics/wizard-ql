@@ -5,10 +5,10 @@ import { type Token, type TypeRecord, OPERATION_ALIAS_DICTIONARY, OPERATION_PURP
 import { type ExpressionConstraints, QUOTE_EDGE_REGEX, parse, tokenize } from './parse'
 import { ConstraintError, ParseError } from './errors'
 
-interface DOMInputOptions<T extends TypeRecord> {
+interface DOMInputOptions<T extends TypeRecord, V extends boolean> {
   input: HTMLElement
-  constraints?: ExpressionConstraints<T>
-  onUpdate?: (expression: ReturnType<typeof parse<T>> | ParseError | ConstraintError, tokens: Token[], string: string) => void
+  constraints?: ExpressionConstraints<T, V>
+  onUpdate?: (expression: ReturnType<typeof parse<T, V>> | ParseError | ConstraintError, tokens: Token[], string: string) => void
   parseOnInitialize?: boolean
 }
 
@@ -61,7 +61,7 @@ function setCursor (element: HTMLElement, index: number): void {
  * @warn This is a DOM function that is not meant for the backend
  * @returns A destroy function (destroys listening and functionality, not the element)
  */
-export function createDOMInput<const T extends TypeRecord> ({ input, constraints, onUpdate, parseOnInitialize }: DOMInputOptions<T>): () => void {
+export function createDOMInput<const T extends TypeRecord, const V extends boolean> ({ input, constraints, onUpdate, parseOnInitialize }: DOMInputOptions<T, V>): () => void {
   const history: Array<{ text: string, cursor: number }> = []
   let historyIndex = -1
 
@@ -140,7 +140,7 @@ export function createDOMInput<const T extends TypeRecord> ({ input, constraints
       })
     }
 
-    let result: ReturnType<typeof parse<T>> | ParseError | ConstraintError
+    let result: ReturnType<typeof parse<T, V>> | ParseError | ConstraintError
 
     try {
       result = parse(newTokens, constraints)
