@@ -448,6 +448,8 @@ test('basic parsing errors', () => {
   expect(() => parse('operation = \\='), 'double equal with escape doesnt throw').not.toThrow()
   expect(() => parse('operation = "="'), 'double equal with quotes doesnt throw').not.toThrow()
   expect(() => parse('"field" "unknown" = foo'), 'two tokens for field').toThrow(ParseError)
+  expect(() => parse('field = "foo" bar or foo'), 'quote literal in the middle').toThrow(ParseError)
+  expect(() => parse('field = "foo" or foo "bar"'), 'quote literal at the end').toThrow(ParseError)
 })
 
 test('group disjunction', () => {

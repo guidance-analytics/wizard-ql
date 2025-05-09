@@ -9,6 +9,7 @@ interface DOMInputOptions<T extends TypeRecord> {
   input: HTMLElement
   constraints?: ExpressionConstraints<T>
   onUpdate?: (expression: ReturnType<typeof parse<T>> | ParseError | ConstraintError, tokens: Token[], string: string) => void
+  parseOnInitialize?: boolean
 }
 
 /**
@@ -60,7 +61,7 @@ function setCursor (element: HTMLElement, index: number): void {
  * @warn This is a DOM function that is not meant for the backend
  * @returns A destroy function (destroys listening and functionality, not the element)
  */
-export function createDOMInput<const T extends TypeRecord> ({ input, constraints, onUpdate }: DOMInputOptions<T>): () => void {
+export function createDOMInput<const T extends TypeRecord> ({ input, constraints, onUpdate, parseOnInitialize }: DOMInputOptions<T>): () => void {
   const history: Array<{ text: string, cursor: number }> = []
   let historyIndex = -1
 
@@ -122,6 +123,9 @@ export function createDOMInput<const T extends TypeRecord> ({ input, constraints
     for (let t = newTokens.length + offset; t < input.childNodes.length; ++t) {
       input.removeChild(input.childNodes.item(t))
     }
+
+    const last = input.lastElementChild
+    if (last?.tagName === 'BR') last.remove()
 
     observer.observe(input, { characterData: true, childList: true, subtree: true })
 
@@ -194,6 +198,7 @@ export function createDOMInput<const T extends TypeRecord> ({ input, constraints
   input.addEventListener('blur', update, { passive: true })
 
   observer.observe(input, { characterData: true, childList: true, subtree: true })
+  if (parseOnInitialize) update()
   return () => {
     observer.disconnect()
     input.removeEventListener('keydown', onKey)

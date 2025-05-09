@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "files": ["dist/"],
   "scripts": {
-    "build": "rm -r dist && bun build --target=node --format=esm --packages external --minify src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json"
+    "build": "rm -r dist && bun build --target=node --format=esm --packages external src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json"
   },
   "devDependencies": {
     "@types/bun": "latest",

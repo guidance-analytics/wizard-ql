@@ -331,6 +331,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
   let inConjunction = false
 
   let groupOperation: JunctionOperation | undefined
+  let expectingExpression = true
   const expressions: TypedExpression[] = []
 
   /**
@@ -361,6 +362,8 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
 
     try {
       if (field && comparisonOperation && value) {
+        if (!expectingExpression) throw new ParseError<false>('Unexpected expression resolution before junctive operator')
+
         group.push(validateCondition({
           type: 'condition',
           field: field.content,
@@ -368,7 +371,10 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
           value: value.content
         }, constraints))
         inConjunction = false
+        expectingExpression = false
       } else if (field && !comparisonOperation && !value) {
+        if (!expectingExpression) throw new ParseError<false>('Unexpected expression resolution before junctive operator')
+
         group.push(validateCondition({
           type: 'condition',
           field: field.content,
@@ -376,6 +382,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
           value: true
         }, constraints))
         inConjunction = false
+        expectingExpression = false
       } else if (field || comparisonOperation || value !== undefined) {
         if (noopIfFail) return
         else throw new ParseError<false>('Failed to resolve condition; missing operand or operator')
@@ -440,7 +447,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
         resolveCondition(true)
       } catch (err) {
         if (err instanceof ParseError) {
-          const clone = new ParseError(err.rawMessage, field!.token, field!.index, token, _offset + t)
+          const clone = new ParseError(err.rawMessage, field?.token ?? token, field?.index ?? _offset + t, token, _offset + t)
           clone.stack = err.stack
           throw clone
         } else throw err
@@ -449,6 +456,7 @@ function _parse<const T extends TypeRecord> (tokens: Token[], _offset: number, c
       const prior = expressions.at(-1)
       if (!prior) throw new ParseError('Unexpected junction operator with no preceding expression', token, _offset + t)
 
+      expectingExpression = true
       if (groupOperation && groupOperation !== op) {
         switch (groupOperation) {
           case 'AND': { // assume op = OR
