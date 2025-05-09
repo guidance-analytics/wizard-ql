@@ -450,6 +450,7 @@ test('basic parsing errors', () => {
   expect(() => parse('"field" "unknown" = foo'), 'two tokens for field').toThrow(ParseError)
   expect(() => parse('field = "foo" bar or foo'), 'quote literal in the middle').toThrow(ParseError)
   expect(() => parse('field = "foo" or foo "bar"'), 'quote literal at the end').toThrow(ParseError)
+  expect(() => parse('= "foo" or foo "bar"'), 'opening with comparison').toThrow(ParseError)
 })
 
 test('group disjunction', () => {

@@ -230,9 +230,9 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
   types?: T
 
   /**
-   * Restriction checks and type checks are case insensitive
+   * Field names in restriction checks and type checks are case insensitive
    * @note If this is enabled, the keys in the restricted record and type record must be all lowercase
-   * @note If enabled, all field will be returned as lowercase
+   * @note If enabled, all fields will be returned as lowercase
    */
   caseInsensitive?: boolean
 
@@ -535,7 +535,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           resolveCondition()
         } catch (err) {
           if (err instanceof ParseError) {
-            const clone = new ParseError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
+            const clone = new ParseError(err.rawMessage, (field?.token ?? token), field?.index ?? _offset + t, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
             clone.stack = err.stack
             throw clone
           } else throw err
@@ -571,6 +571,20 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
       }
     }
 
+    if (!comparisonOperation || (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison')) {
+      if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison') {
+        if (comparisonOperation || !field) throw new ParseError('Unexpected comparison operator', field?.token ?? token, field?.index ?? _offset + t, token, _offset + t)
+
+        comparisonOperation = {
+          content: op as ComparisonOperation,
+          token,
+          index: _offset + t
+        }
+
+        continue
+      } else if (field) throw new ParseError('Expected a comparison operator', field.token, field.index, token, _offset + t)
+    }
+
     if (!field) {
       if (token.content === '!') {
         const nextToken = tokens[t + 1]
@@ -580,7 +594,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           resolveCondition()
         } catch (err) {
           if (err instanceof ParseError) {
-            const clone = new ParseError(err.rawMessage, token, _offset)
+            const clone = new ParseError(err.rawMessage, token, _offset + t, nextToken, _offset + t + 1)
             clone.stack = err.stack
             throw clone
           } else throw err
@@ -618,20 +632,6 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
       }
 
       continue
-    }
-
-    if (!comparisonOperation || (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison')) {
-      if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'comparison') {
-        if (comparisonOperation) throw new ParseError('Unexpected comparison operator', field.token, field.index, token, _offset + t)
-
-        comparisonOperation = {
-          content: op as ComparisonOperation,
-          token,
-          index: _offset + t
-        }
-
-        continue
-      } else throw new ParseError('Expected a comparison operator', field.token, field.index, token, _offset + t)
     }
 
     if (!value) {
@@ -714,7 +714,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         resolveCondition()
       } catch (err) {
         if (err instanceof ParseError) {
-          const clone = new ParseError(err.rawMessage, field.token, field.index, value.token ?? comparisonOperation.token ?? field.token, value.index ?? comparisonOperation.index ?? field.index)
+          const clone = new ParseError(err.rawMessage, field.token, field.index, value.token ?? comparisonOperation?.token ?? field.token, value.index ?? comparisonOperation?.index ?? field.index)
           clone.stack = err.stack
           throw clone
         } else throw err
