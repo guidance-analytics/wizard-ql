@@ -805,39 +805,97 @@ test('restriction constraints', () => {
     caseInsensitive: true
   }), 'case insensitivity and quotes').toThrow(ConstraintError)
 
+  // --------- permissive ---------
+
   expect(() => parse('field = allowed || field = string', {
     restricted: {
-      field: ['string']
+      field: ['deny', ['string']]
     }
   }), 'prohibited value restriction').toThrow(ConstraintError)
 
   expect(() => parse('field = allowed', {
     restricted: {
-      field: ['string']
+      field: ['deny', ['string']]
     }
-  }), 'allowed value restriction').not.toThrow()
+  }), 'permissive allowed value restriction').not.toThrow()
 
   expect(() => parse('array in [1, 2, cow, null, true]', {
     restricted: {
-      array: ['null']
+      array: ['deny', ['null']]
     }
-  }), 'prohibited array checking').toThrow(ConstraintError)
+  }), 'permissive aprohibited array checking').toThrow(ConstraintError)
 
   expect(() => parse('array in [1, 2, cow, true]', {
     restricted: {
-      array: ['null']
+      array: ['deny', ['null']]
     }
-  }), 'allowed array checking').not.toThrow()
+  }), 'permissive aallowed array checking').not.toThrow()
 
   expect(() => parse('plural in [cows, dogs, cats, pigs]', {
     restricted: {
-      plural: [/[^s]$/]
+      plural: ['deny', [/[^s]$/]]
     }
-  }), 'allowed regexing').not.toThrow()
+  }), 'permissive aallowed regexing').not.toThrow()
 
   expect(() => parse('plural in [cows, dogs, cat, pigs]', {
     restricted: {
-      plural: [/[^s]$/]
+      plural: ['deny', [/[^s]$/]]
     }
-  }), 'prohibited regexing').toThrow(ConstraintError)
+  }), 'permissive aprohibited regexing').toThrow(ConstraintError)
+
+  // --------- prohibitive ---------
+
+  expect(() => parse('field = notallowed || field = notallowedeither', {
+    restricted: {
+      field: ['allow', ['string']]
+    }
+  }), 'prohibitive prohibited value restriction').toThrow(ConstraintError)
+
+  expect(() => parse('field = allowed || field = string', {
+    restricted: {
+      field: ['allow', ['other', 'string']]
+    }
+  }), 'prohibitive prohibited value restriction with two options').toThrow(ConstraintError)
+
+  expect(() => parse('field = allowed || field = string', {
+    restricted: {
+      field: ['allow', ['string', /^allowed$/]]
+    }
+  }), 'prohibitive allowed value restriction with two options mixed type').not.toThrow()
+
+  expect(() => parse('array in [1, 2, cow, null, true]', {
+    restricted: {
+      array: ['allow', ['null', 'cow']]
+    }
+  }), 'prohibitive prohibited array checking 1 instance').toThrow(ConstraintError)
+
+  expect(() => parse('array in [1, 2, cow, true]', {
+    restricted: {
+      array: ['allow', ['null']]
+    }
+  }), 'prohibitive prohibited array checking no instance').toThrow(ConstraintError)
+
+  expect(() => parse('array in [null, bar]', {
+    restricted: {
+      array: ['allow', ['bar', 'null']]
+    }
+  }), 'prohibitive allowed array checking all instance').not.toThrow()
+
+  expect(() => parse('plural in [cows, dogs, cats, pigs]', {
+    restricted: {
+      plural: ['allow', [/[^s]$/]]
+    }
+  }), 'prohibitive allowed regexing').toThrow(ConstraintError)
+
+  expect(() => parse('plural in [cows, dogs, cat, pigs]', {
+    restricted: {
+      plural: ['allow', [/[^s]$/]]
+    }
+  }), 'prohibitive prohibited regexing').toThrow(ConstraintError)
+
+  expect(() => parse('plural in [cow, dog, cats, pig]', {
+    restricted: {
+      plural: ['allow', [/[^s]$/, /^cats$/]]
+    }
+  }), 'prohibitive allowed regexing').not.toThrow()
 })

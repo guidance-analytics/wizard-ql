@@ -6,7 +6,7 @@ const tseslint = neostandard.plugins['typescript-eslint']
 // @ts-expect-error -- typescript-eslint has a goofy return type
 export default [
   ...neostandard({
-    ignores: ['**/*.js', 'src/graphql/'],
+    ignores: ['**/*.js'],
     ts: true,
     env: ['node', 'es2025']
   }),
@@ -14,7 +14,7 @@ export default [
     tseslint.configs.strictTypeChecked,
     tseslint.configs.stylisticTypeChecked,
     {
-      ignores: ['**/*.js', 'src/graphql/'],
+      ignores: ['**/*.js'],
       languageOptions: {
         parser: tseslint.parser,
         parserOptions: {
@@ -73,11 +73,11 @@ export default [
         '@typescript-eslint/no-confusing-void-expression': 'off',
         '@typescript-eslint/restrict-template-expressions': ['error', {
           allowAny: true,
-          allowBoolean: false,
+          allowBoolean: true,
           allowNever: false,
-          allowNullish: true,
+          allowNullish: false,
           allowNumber: true,
-          allowRegExp: false
+          allowRegExp: true
         }],
         '@typescript-eslint/restrict-plus-operands': ['error', {
           allowAny: true,
@@ -131,7 +131,6 @@ export default [
     ...jsdoc.configs['flat/recommended-typescript-error'],
     name: 'jsdoc',
     files: ['**/*.ts*', '**/*.*js'],
-    ignores: ['migrations/**/*', 'src/components/ui/**/*', 'src/graphql/'],
     plugins: {
       jsdoc
     },

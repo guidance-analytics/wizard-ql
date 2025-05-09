@@ -217,11 +217,12 @@ export interface ExpressionConstraints<T extends TypeRecord> {
   /**
    * Restricted fields.
    * Restrict an entire field by setting it to true.
-   * Restrict a collection of values from a field by passing an array of restricted values.
+   * By default allow any value and restrict a collection of values by passing ['deny', VALUES[]]
+   * By default restrict any value and allow a collection of values by passing ['allow', VALUES[]]
    * If the field query is of array type, it will check all entries of the array.
    * @warn If 42 (the number) is prohibited, "42" the string will still be allowed
    */
-  restricted?: Partial<Record<keyof T | (string & {}), boolean | Array<boolean | string | number | RegExp>>>
+  restricted?: Partial<Record<keyof T | (string & {}), boolean | ['allow' | 'deny', Array<boolean | string | number | RegExp>]>>
 
   /**
    * Restriction checks and type checks are case insensitive
@@ -255,11 +256,25 @@ function validateCondition<T extends TypeRecord> (condition: Omit<UncheckedCondi
   // Check if this field is allowed to be queried
   if (restriction === true) throw new ConstraintError<false>(`Field "${condition.field}" is restricted`)
   else if (Array.isArray(restriction)) {
-    for (const entry of restriction) {
-      if (entry instanceof RegExp) {
-        if (values.some((v) => entry.test(v.toString()))) throw new ConstraintError<false>(`Value for field "${condition.field}" violates constraint "${entry.toString()}"`)
-      } else {
-        if (values.includes(entry)) throw new ConstraintError<false>(`Forbidden value "${entry}" for field "${condition.field}"`)
+    const [philosophy, checks] = restriction
+
+    if (philosophy === 'deny') {
+      for (const check of checks) {
+        if (check instanceof RegExp) {
+          if (values.some((v) => check.test(v.toString()))) {
+            throw new ConstraintError<false>(`Value for field "${condition.field}" violates prohibitive pattern constraint "${check.toString()}". Prohibited values/patterns: Allowed values/patterns: ${checks.join(', ')}`)
+          }
+        } else {
+          if (values.includes(check)) {
+            throw new ConstraintError<false>(`Forbidden value "${check}" for field "${condition.field}". Prohibited values/patterns: ${checks.join(', ')}`)
+          }
+        }
+      }
+    } else {
+      for (const value of values) {
+        if (!checks.some((c) => (c instanceof RegExp && c.test(value.toString())) || c === value)) {
+          throw new ConstraintError<false>(`Value for field "${condition.field}" does not meet any allowed value/pattern. Allowed values/patterns: ${checks.join(', ')}`)
+        }
       }
     }
 
