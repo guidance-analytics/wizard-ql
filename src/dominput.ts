@@ -69,7 +69,7 @@ export function createDOMInput<const T extends TypeRecord, const V extends boole
   function update (): void {
     const focused = input.contains(document.activeElement)
 
-    const text = input.textContent!
+    const text = input.textContent!.replaceAll('\n', '')
 
     const newTokens = tokenize(text)
     const lastToken = newTokens.at(-1)
