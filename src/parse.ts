@@ -253,8 +253,9 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
  */
 function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
-  const restriction = constraints?.restricted?.[condition.field]
-  const type = constraints?.types?.[condition.field]
+  const field = constraints?.caseInsensitive ? condition.field.toLowerCase() : condition.field
+  const restriction = constraints?.restricted?.[field]
+  const type = constraints?.types?.[field]
 
   if (constraints?.disallowUnvalidated && restriction === undefined && type === undefined) throw new ConstraintError<false>(`Unknown field "${condition.field}"`)
 
@@ -319,6 +320,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   }
 
   const edit = condition as ReturnType<typeof validateCondition<T, V>>
+  edit.field = field
   edit.validated = validated
   return edit
 }
@@ -377,8 +379,6 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
    * @throws {ParseError<false> | ConstraintError}
    */
   function resolveCondition (noopIfFail?: boolean): void {
-    if (field && constraints?.caseInsensitive) field.content = field.content.toLowerCase()
-
     const group = getExpressionGroup()
 
     try {
