@@ -938,3 +938,59 @@ test('restriction constraints', () => {
     disallowUnvalidated: true
   }), 'present in types not throws').not.toThrow()
 })
+
+test('date conversion', () => {
+  expect(parse('field = 2025-05-16'), 'by default not interpreted').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: '2025-05-16',
+    validated: false
+  })
+
+  expect(parse('field = 2025-05-16', { interpretDates: true }), 'interpreted pt. 1').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: 1747353600000,
+    validated: false
+  })
+
+  const now = new Date()
+  expect(parse(`field = "${now.toISOString()}"`, { interpretDates: true }), 'interpreted pt. 2').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: now.getTime(),
+    validated: false
+  })
+
+  expect(parse('field < foo or field = bar', { interpretDates: (v) => v === 'foo' ? 123 : NaN }), 'custom function').toEqual({
+    type: 'group',
+    operation: 'OR',
+    constituents: [
+      {
+        type: 'condition',
+        field: 'field',
+        operation: 'LESS',
+        value: 123,
+        validated: false
+      },
+      {
+        type: 'condition',
+        field: 'field',
+        operation: 'EQUAL',
+        value: 'bar',
+        validated: false
+      }
+    ]
+  })
+
+  expect(parse('field matches 2025-05-16', { interpretDates: true }), 'not parsed for string operation').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'MATCH',
+    value: '2025-05-16',
+    validated: false
+  })
+})

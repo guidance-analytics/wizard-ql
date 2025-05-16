@@ -240,6 +240,13 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
    * Disallow fields that are not present in the "restricted" record or the "types" record
    */
   disallowUnvalidated?: V
+
+  /**
+   * Interpret date string values as numbers\
+   * If true, use `new Date()` constructor to make this determination\
+   * If a callback is passed, use that. A value of `NaN` denotes an invalid date
+   */
+  interpretDates?: boolean | ((v: string) => number)
 }
 
 /**
@@ -258,6 +265,31 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   const type = constraints?.types?.[field]
 
   if (constraints?.disallowUnvalidated && restriction === undefined && type === undefined) throw new ConstraintError<false>(`Unknown field "${condition.field}"`)
+
+  const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
+  const types = type && (Array.isArray(type) ? type : [type])
+
+  if (constraints?.interpretDates && (!types || types.includes('number')) && ['primitive', 'number'].includes(operationType)) {
+    const validator = constraints.interpretDates === true ? (v: string) => +new Date(v) : constraints.interpretDates
+
+    if (Array.isArray(condition.value)) {
+      for (let v = 0; v < condition.value.length; ++v) {
+        const val = condition.value[v]
+
+        if (typeof val === 'string') {
+          const numberized = validator(val)
+          if (!isNaN(numberized)) condition.value[v] = numberized
+        }
+      }
+    } else {
+      const val = condition.value
+
+      if (typeof val === 'string') {
+        const numberized = validator(val)
+        if (!isNaN(numberized)) condition.value = numberized
+      }
+    }
+  }
 
   const values = Array.isArray(condition.value) ? condition.value : [condition.value]
 
@@ -290,7 +322,6 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   }
 
   // Check if the value matches the operation's expected type
-  const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
   let operationAllowed: boolean
   switch (operationType) {
     case 'primitive': operationAllowed = !Array.isArray(condition.value); break
@@ -301,9 +332,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   if (!operationAllowed) throw new ConstraintError<false>(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`)
 
   // Check if the value matches the constrained type
-  if (type) {
-    const types = Array.isArray(type) ? type : [type]
-
+  if (types) {
     const meets = values.every((v) => types.some((t) => {
       switch (t) { // Don't do direct string comparison to leave possibility for custom non-JS types
         case 'boolean': return typeof v === 'boolean'
