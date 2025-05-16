@@ -722,7 +722,7 @@ test('operation constraints', () => {
     ['IN', 'string'],
     ['NOTIN', '42'],
     ['MATCH', '[1, 2]'],
-    ['NOTMATCH', '12']
+    ['NOTMATCH', '[1, 5]']
   ]
 
   for (const [op, value] of tests) expect(() => parse(`field ${op} ${value}`), op).toThrow(ConstraintError)
@@ -745,9 +745,9 @@ test('type constraints', () => {
     value: 'string',
     validated: true
   })
-  expect(() => parse('foo = 42', {
+  expect(() => parse('foo = bar', {
     types: {
-      foo: 'string'
+      foo: 'number'
     }
   }), 'prohibited single value').toThrow(ConstraintError)
   expect(() => parse('foo in [string, 10, entry, 8]', {
@@ -762,7 +762,7 @@ test('type constraints', () => {
   }), 'allowed mixed single value').not.toThrow()
   expect(() => parse('foo in [string, 10, true, 8]', {
     types: {
-      foo: ['string', 'number']
+      foo: ['boolean', 'number']
     }
   }), 'prohibited mixed multiple values').toThrow(ConstraintError)
   expect(() => parse('foo', {
@@ -937,6 +937,42 @@ test('restriction constraints', () => {
     },
     disallowUnvalidated: true
   }), 'present in types not throws').not.toThrow()
+
+  expect(parse('field = 1234', {
+    types: {
+      field: ['string']
+    }
+  }), 'number coerced to string if needed (single value)').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: '1234',
+    validated: true
+  })
+
+  expect(parse('field in [1234, 5678]', {
+    types: {
+      field: ['string']
+    }
+  }), 'number coerced to string if needed (multiple value)').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'IN',
+    value: ['1234', '5678'],
+    validated: true
+  })
+
+  expect(parse('field = false', {
+    types: {
+      field: ['string']
+    }
+  }), 'boolean coerced to string if needed').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: 'false',
+    validated: true
+  })
 })
 
 test('date conversion', () => {

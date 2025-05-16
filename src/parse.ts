@@ -253,12 +253,13 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
  * Validate that a condition meets constraints\
  * This operation mutates the condition to apply the validated field
  * @template T A type record, mapping field names to their types
- * @param                            condition   The condition to validate
- * @param                            constraints The constraints to check
+ * @param                            condition       The condition to validate
+ * @param                            constraints     The constraints to check
+ * @param                            valueIsImplicit Was this value implicitly inferred? If so, don't attempt stringification
  * @throws  {ConstraintError<false>}
- * @returns                                      The same reference to the condition
+ * @returns                                          The same reference to the condition
  */
-function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
+function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined, valueIsImplicit?: boolean): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
   const field = constraints?.caseInsensitive
     ? [...Object.keys(constraints.types ?? {}), ...Object.keys(constraints.restricted ?? {})].find((k) => k.toLowerCase() === condition.field.toLowerCase()) ?? condition.field
@@ -271,7 +272,9 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
   const types = type && (Array.isArray(type) ? type : [type])
 
-  if (constraints?.interpretDates && (!types || types.includes('number')) && ['primitive', 'number'].includes(operationType)) {
+  // Date interpretation
+  // Mutates
+  if (!valueIsImplicit && constraints?.interpretDates && (!types || types.includes('number')) && ['primitive', 'number'].includes(operationType)) {
     const validator = constraints.interpretDates === true ? (v: string) => +new Date(v) : constraints.interpretDates
 
     if (Array.isArray(condition.value)) {
@@ -323,6 +326,10 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
     validated = true
   }
 
+  // If this is a string operation and value is a number or boolean, stringify it
+  // Mutates
+  if (!valueIsImplicit && operationType === 'string' && (typeof condition.value === 'number' || typeof condition.value === 'boolean')) condition.value = condition.value.toString()
+
   // Check if the value matches the operation's expected type
   let operationAllowed: boolean
   switch (operationType) {
@@ -335,21 +342,37 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
 
   // Check if the value matches the constrained type
   if (types) {
-    const meets = values.every((v) => types.some((t) => {
-      switch (t) { // Don't do direct string comparison to leave possibility for custom non-JS types
-        case 'boolean': return typeof v === 'boolean'
-        case 'number': return typeof v === 'number'
-        case 'string': return typeof v === 'string'
+    const meets = values.every((v, i) => {
+      // Stringify value if strings are allowed and numbers/booleans aren't
+      // Mutates
+      if (
+        !valueIsImplicit &&
+        (
+          (typeof v === 'number' && !types.includes('number')) ||
+          (typeof v === 'boolean' && !types.includes('boolean'))
+        ) && types.includes('string')
+      ) {
+        v = v.toString()
+        values[i] = v
+        if (!Array.isArray(condition.value)) condition.value = v
       }
 
-      return false
-    }))
+      return types.some((t) => {
+        switch (t) { // Don't do direct string comparison to leave possibility for custom non-JS types
+          case 'boolean': return typeof v === 'boolean'
+          case 'number': return typeof v === 'number'
+          case 'string': return typeof v === 'string'
+          default: return false
+        }
+      })
+    })
 
     if (!meets) throw new ConstraintError<false>(`Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${types.join(', ')}`)
 
     validated = true
   }
 
+  // Mutate
   const edit = condition as ReturnType<typeof validateCondition<T, V>>
   edit.field = field
   edit.validated = validated
@@ -381,6 +404,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
     content: Primitive | Primitive[]
     token?: Token
     index?: number
+    implicit?: boolean
   } | undefined
   let inConjunction = false
 
@@ -421,7 +445,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           field: field.content,
           operation: comparisonOperation.content,
           value: value.content
-        }, constraints))
+        }, constraints, value.implicit))
         inConjunction = false
         expectingExpression = false
       } else if (field && !comparisonOperation && !value) {
@@ -432,7 +456,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           field: field.content,
           operation: 'EQUAL',
           value: true
-        }, constraints))
+        }, constraints, true))
         inConjunction = false
         expectingExpression = false
       } else if (field || comparisonOperation || value !== undefined) {
@@ -642,7 +666,8 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           content: 'EQUAL'
         }
         value = {
-          content: false
+          content: false,
+          implicit: true
         }
 
         try {
