@@ -231,8 +231,8 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
 
   /**
    * Field names in restriction checks and type checks are case insensitive
-   * @note If this is enabled, the keys in the restricted record and type record must be all lowercase
-   * @note If enabled, all fields will be returned as lowercase
+   * @note If enabled, all fields will be returned as their casing denoted by the types or restricted record
+   * @warn Mismatching casing between the restricted record and the type record will prioritize the restricted record
    */
   caseInsensitive?: boolean
 
@@ -260,7 +260,9 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
  */
 function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
-  const field = constraints?.caseInsensitive ? condition.field.toLowerCase() : condition.field
+  const field = constraints?.caseInsensitive
+    ? [...Object.keys(constraints.types ?? {}), ...Object.keys(constraints.restricted ?? {})].find((k) => k.toLowerCase() === condition.field.toLowerCase()) ?? condition.field
+    : condition.field
   const restriction = constraints?.restricted?.[field]
   const type = constraints?.types?.[field]
 

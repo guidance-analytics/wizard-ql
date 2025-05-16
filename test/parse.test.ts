@@ -780,12 +780,12 @@ test('type constraints', () => {
 
   expect(parse('fIeLD in [1, 2, peanut butter, 4]', {
     types: {
-      field: ['string', 'number']
+      FIELd: ['string', 'number']
     },
     caseInsensitive: true
   }), 'allowed case insensitivity').toEqual({
     type: 'condition',
-    field: 'field',
+    field: 'FIELd',
     operation: 'IN',
     value: [1, 2, 'peanut butter', 4],
     validated: true
