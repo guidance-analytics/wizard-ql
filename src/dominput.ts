@@ -70,14 +70,13 @@ export function createDOMInput<const T extends TypeRecord, const V extends boole
     const focused = input.contains(document.activeElement)
 
     const text = input.textContent!.replaceAll('\n', '')
+    const endPadding = input.textContent?.match(/\s*$/)?.[0].length ?? 0
 
     const newTokens = tokenize(text)
     const lastToken = newTokens.at(-1)
-    if (lastToken && lastToken.content in OPERATION_ALIAS_DICTIONARY && focused) return
+    if (lastToken && lastToken.content in OPERATION_ALIAS_DICTIONARY && focused && (!endPadding && lastToken.content.match(/^[A-Za-z]+?$/))) return
 
     const absoluteIndex = focused ? getCursorIndex(input) : 0
-
-    if (text.endsWith(' ') && focused && absoluteIndex === text.length) return
 
     observer.disconnect()
     let inArray: string | undefined
@@ -85,7 +84,7 @@ export function createDOMInput<const T extends TypeRecord, const V extends boole
     for (let t = 0; t < newTokens.length; ++t) { // Add new nodes
       const token = newTokens[t]!
       const prior = newTokens[t - 1]
-      const differenceFromLast = prior ? token.index - (prior.index + prior.content.length) : 0
+      const differenceFromLast = prior ? token.index - (prior.index + prior.content.length) : token.index
 
       if (differenceFromLast > 0) {
         const spacer = document.createElement('span')
@@ -120,12 +119,18 @@ export function createDOMInput<const T extends TypeRecord, const V extends boole
     }
 
     // Delete old extra nodes
-    for (let t = newTokens.length + offset; t < input.childNodes.length; ++t) {
-      input.removeChild(input.childNodes.item(t))
-    }
+    while (newTokens.length + offset < input.childNodes.length) input.lastChild?.remove()
 
     const last = input.lastElementChild
     if (last?.tagName === 'BR') last.remove()
+
+    if (endPadding) {
+      const spacer = document.createElement('span')
+      spacer.textContent = ' '.repeat(endPadding)
+      spacer.classList.add('whitespace-pre')
+      spacer.toggleAttribute('data-spacer', true)
+      input.appendChild(spacer)
+    }
 
     observer.observe(input, { characterData: true, childList: true, subtree: true })
 
