@@ -520,7 +520,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
 
     if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'junction') {
       try {
-        resolveCondition(true)
+        resolveCondition()
       } catch (err) {
         if (err instanceof ParseError) {
           const clone = new ParseError(err.rawMessage, field?.token ?? token, field?.index ?? _offset + t, token, _offset + t)
@@ -534,6 +534,8 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
 
       expectingExpression = true
       if (groupOperation && groupOperation !== op) {
+        if (expressions.length < 2) throw new ParseError('Unexpected junction operator with no preceding expression', token, _offset + t)
+
         switch (groupOperation) {
           case 'AND': { // assume op = OR
             const futureSubgroup = _parse(tokens.slice(t + 1), _offset + t, constraints)
@@ -781,8 +783,12 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
   try {
     resolveCondition()
   } catch (err) {
-    if (err instanceof ParseError) throw new ParseError(`Reached end of expression with an incomplete condition {${err.message}}`, tokens.at(-1)!, _offset + tokens.length - 1)
-    else throw err
+    if (err instanceof ParseError) {
+      const clone = new ParseError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
+      clone.stack = err.stack
+
+      throw new ParseError(`Reached end of expression with an incomplete condition {${clone.message}}`, tokens.at(-1)!, _offset + tokens.length - 1)
+    } else throw err
   }
 
   if (inConjunction) throw new ParseError('Dangling junction operator', tokens.at(-1)!, _offset + tokens.length - 1)

@@ -243,6 +243,41 @@ test('invalid operands', () => {
   expect(() => parse('foo in {{}, 1}'), 'brackets in array value').toThrow(ParseError)
   expect(() => parse('foo in [{}, 1]'), 'allowed brackets in array value').not.toThrow()
   expect(() => parse('foo in [\'value\' unseparated, othervalue]'), 'non-surrounding string in array').toThrow(ParseError)
+  expect(() => parse('foo = 123 | (foo ~)'), 'dangling in group').toThrow(ParseError)
+  expect(() => parse('foo = 123 | (foo ~)'), 'dangling in group has known indices').not.toThrow('??')
+})
+
+test('parsing errors', () => { // AI-generated tests
+  // Invalid syntax
+  expect(() => parse('field =')).toThrow(ParseError)
+  expect(() => parse('field = AND')).toThrow(ParseError)
+  expect(() => parse('field = OR')).toThrow(ParseError)
+  expect(() => parse('field = 123 "foo"')).toThrow(ParseError)
+  expect(() => parse('field = [1, 2,')).toThrow(ParseError)
+
+  // Invalid operations
+  expect(() => parse('field <> value')).toThrow(ParseError)
+
+  // Invalid array syntax
+  expect(() => parse('field : [value1, value2')).toThrow(ParseError)
+  expect(() => parse('field = value1, value2]')).toThrow(ParseError)
+
+  // Invalid group syntax
+  expect(() => parse('(field = value')).toThrow(ParseError)
+  expect(() => parse('field = value)')).toThrow(ParseError)
+  expect(() => parse('(field = value AND')).toThrow(ParseError)
+  expect(() => parse('field = value OR)')).toThrow(ParseError)
+
+  // Invalid negation
+  expect(() => parse('!')).toThrow(ParseError)
+  expect(() => parse('!(field = value')).toThrow(ParseError)
+
+  // Invalid conjunctions
+  expect(() => parse('field = value AND OR field2 = value2')).toThrow(ParseError)
+  expect(() => parse('field = value OR AND field2 = value2')).toThrow(ParseError)
+
+  // Invalid escape sequences
+  expect(() => parse('field = value\\ AND field2 = value2')).toThrow(ParseError)
 })
 
 test('unclosed closures', () => {
