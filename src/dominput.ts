@@ -109,6 +109,7 @@ export function createDOMInput<const T extends TypeRecord, const V extends boole
         if (!inArray && ['[', '{'].includes(token.content)) inArray = token.content
       }
       if (inArray && token.content === ',') element.toggleAttribute('data-delimiter', true)
+      if (!inArray && token.content === '!') element.toggleAttribute('data-negation', true)
       if (!inArray && token.content in OPERATION_ALIAS_DICTIONARY) {
         element.setAttribute('data-operation', OPERATION_PURPOSE_DICTIONARY[OPERATION_ALIAS_DICTIONARY[token.content as keyof typeof OPERATION_ALIAS_DICTIONARY]])
       }
