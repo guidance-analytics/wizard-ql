@@ -84,6 +84,10 @@ export const OPERATION_PURPOSE_DICTIONARY = {
   NOTMATCH: 'comparison'
 } as const satisfies Record<Operation, 'junction' | 'comparison'>
 
+type KeysWhereValue<T, V> = Exclude<{
+  [K in keyof T]: T[K] extends V ? K : never
+}[keyof T], never>
+
 export type JunctionOperation = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'junction'>
 export type ComparisonOperation = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'comparison'>
 
