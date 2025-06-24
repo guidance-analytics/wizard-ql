@@ -263,7 +263,7 @@ Type/constraint checks will be case-insensitive on the field name
 > [!NOTE]
 > If enabled, all fields will be returned as their casing denoted by the types or restricted record
 
-> [!WARN]
+> [!WARNING]
 > Mismatching casing between the restricted record and the type record will prioritize the restricted record
 
 ### `disallowUnvalidated`
