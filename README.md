@@ -343,7 +343,7 @@ You can use the `summarize` function to summarize a parsed expression, aggregate
 ## Execution Example
 Below is an example of how a Wizard query would be executed in the context of a [KnexJS Query](https://knexjs.org/)
 
-https://github.com/guidance-analytics/wizard-ql/blob/main/src/execute.ts#L1-L35
+https://github.com/guidance-analytics/wizard-ql/blob/bf8693e2cb5678ef855600d70bc495a614aa3d0b/src/execute.ts#L1-L35
 
 ## DOM Input
 Wizard comes pre-packaged with a DOM input that applies classes for tokens, making for query input with syntax highlighting (up to discretion)
