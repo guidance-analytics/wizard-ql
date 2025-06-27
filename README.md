@@ -112,10 +112,12 @@ For array operators, (`IN`, `NOTIN`), the value must be in brackets separated by
 
 A field OR a value can be wrapped in quotes if it contains a special operator.
 > Example: `"vendor" = "H&M"`
+
 > Example: `"vendor" = H\&M`
 
 You can also escape characters
 > Example: `'speech' = "\"Hello\""`
+
 > Example: `'speech' = '"Hello"'`
 
 Backslashes can be denoted with a double backslash
@@ -256,7 +258,42 @@ Values can be direct values (string, number, boolean) or regex expressions
 "deny" will deny the values/patterns and allow all others
 
 ### `types`
-A record mapping field names to (`boolean`, `string`, `number`). Only operators that can function on that type can be used for that field. By default, fields will be treated as being able to be any of the three types.
+A record mapping field names to (`boolean`, `string`, `number`). The value in the record can either be a single allowed type or an array of allowed types. Only operators that can function on that type can be used for that field. By default, fields will be treated as being able to be any of the three types.
+
+> Example:
+> ```js
+> parse('field1 = value', {
+>   types: {
+>     field1: 'string',
+>     field2: ['string', 'number']
+>   }
+> })
+> ```
+
+### Regarding constraints: `validated` property
+When a field has matched either a key in `types` or a field in `restricted`, the `validated` property on the parsed condition will be true. This is due to a limitation with TypeScript's type checking.
+
+Therefore, type inference would look something like this:
+```js
+const parsed = parse('field = value', {
+  types: {
+    field: ['string', 'number']
+  }
+})
+
+if (parsed.validated) {
+  switch (parsed.type) {
+    case 'condition':
+      switch (parsed.field) {
+        case 'field':
+          parsed.value
+          // ^?: string | number
+          break
+      }
+      break
+  }
+}
+```
 
 ### `caseInsensitive`
 Type/constraint checks will be case-insensitive on the field name
