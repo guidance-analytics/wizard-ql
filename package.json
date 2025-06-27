@@ -1,5 +1,18 @@
 {
   "name": "wizard-ql",
+  "author": {
+    "name": "Arthur Neuman",
+    "url": "https://github.com/exoRift"
+  },
+  "homepage": "https://github.com/guidance-analytics/wizard-ql",
+  "description": "WizardQL is a natural-language-like query language for constructing data queries for resources that meet conditions.",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guidance-analytics/wizard-ql.git"
+  },
+  "keywords": ["query", "language", "querylanguage", "parser", "cel", "expression"],
+  "license": "Apache-2.0",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "type": "module",
