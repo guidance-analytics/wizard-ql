@@ -391,3 +391,22 @@ const destructor = createDOMInput({ input: document.getElementById('input') })
 
 destructor()
 ```
+
+### Token types
+Depending on a token's type, attributes will be applied to the contents of the input for styling:
+
+- `data-spacer` - Whitespace
+- `data-node` - An actual token
+  - `data-quoted` - Quoted text
+  - `data-number` - A number
+  - `data-bracket` - A parenthesis or array bracket
+  - `data-delimiter` - A comma
+  - `data-negation` - A negatory exclamation mark
+  - `data-operation` - A comparison or junction operator
+
+A token can also possess `data-error` if it is part of an error span
+
+The input itself can have the following attributes:
+- `data-error-message` - The error message
+- `data-error-start` - The starting token index for the error
+- `data-error-end` - The end token index for the error
