@@ -38,29 +38,18 @@ function constructHeader (startToken: Token | undefined, startIndex: number | un
 /**
  * A WizardQL string expression parsing error
  */
-export class ParseError<Filled extends boolean = true> extends Error {
+export class ParseError extends Error {
   readonly name = 'ParseError' as const
   /** The message without the header */
   readonly rawMessage: string
   /** The first token this error pertains to */
-  readonly startToken: Filled extends true ? Token : Token | undefined
+  readonly startToken: Token | undefined
   /** The last token this error pertains to */
-  readonly endToken: Filled extends true ? Token : Token | undefined
+  readonly endToken: Token | undefined
   /** The start token index */
-  readonly startIndex: Filled extends true ? number : number | undefined
+  readonly startIndex: number | undefined
   /** The end token index */
-  readonly endIndex: Filled extends true ? number : number | undefined
-
-  // @ts-expect-error
-  constructor (message: Filled extends true ? never : string) // eslint-disable-line jsdoc/require-jsdoc
-  constructor (message: string, startToken: Filled extends true ? Token : Token | undefined, startIndex: Filled extends true ? number : number | undefined) // eslint-disable-line jsdoc/require-jsdoc
-  constructor ( // eslint-disable-line jsdoc/require-jsdoc
-    message: string,
-    startToken: Filled extends true ? Token : Token | undefined,
-    startIndex: Filled extends true ? number : number | undefined,
-    endToken: Filled extends true ? Token : Token | undefined,
-    endIndex: Filled extends true ? number : number | undefined
-  )
+  readonly endIndex: number | undefined
 
   /**
    * Construct a Parsing Error
@@ -72,10 +61,10 @@ export class ParseError<Filled extends boolean = true> extends Error {
    */
   constructor (
     message: string,
-    startToken: Filled extends true ? Token : Token | undefined,
-    startIndex: Filled extends true ? number : number | undefined,
-    endToken: Filled extends true ? Token : Token | undefined = startToken,
-    endIndex: Filled extends true ? number : number | undefined = startIndex
+    startToken: Token | undefined,
+    startIndex: number | undefined,
+    endToken: Token | undefined = startToken,
+    endIndex: number | undefined = startIndex
   ) {
     const header = constructHeader(startToken, startIndex, endToken, endIndex)
 
@@ -91,29 +80,18 @@ export class ParseError<Filled extends boolean = true> extends Error {
 /**
  * A WizardQL string expression parsing constraint error
  */
-export class ConstraintError<Filled extends boolean = true> extends Error {
+export class ConstraintError extends Error {
   readonly name = 'ConstraintError' as const
   /** The message without the header */
   readonly rawMessage: string
   /** The first token this error pertains to */
-  readonly startToken: Filled extends true ? Token : Token | undefined
+  readonly startToken: Token | undefined
   /** The last token this error pertains to */
-  readonly endToken: Filled extends true ? Token : Token | undefined
+  readonly endToken: Token | undefined
   /** The start token index */
-  readonly startIndex: Filled extends true ? number : number | undefined
+  readonly startIndex: number | undefined
   /** The end token index */
-  readonly endIndex: Filled extends true ? number : number | undefined
-
-  // @ts-expect-error
-  constructor (message: Filled extends true ? never : string) // eslint-disable-line jsdoc/require-jsdoc
-  constructor (message: string, startToken: Filled extends true ? Token : Token | undefined, startIndex: Filled extends true ? number : number | undefined) // eslint-disable-line jsdoc/require-jsdoc
-  constructor ( // eslint-disable-line jsdoc/require-jsdoc
-    message: string,
-    startToken: Filled extends true ? Token : Token | undefined,
-    startIndex: Filled extends true ? number : number | undefined,
-    endToken: Filled extends true ? Token : Token | undefined,
-    endIndex: Filled extends true ? number : number | undefined
-  )
+  readonly endIndex: number | undefined
 
   /**
    * Construct a Constraint Error
@@ -125,10 +103,10 @@ export class ConstraintError<Filled extends boolean = true> extends Error {
    */
   constructor (
     message: string,
-    startToken: Filled extends true ? Token : Token | undefined,
-    startIndex: Filled extends true ? number : number | undefined,
-    endToken: Filled extends true ? Token : Token | undefined = startToken,
-    endIndex: Filled extends true ? number : number | undefined = startIndex
+    startToken: Token | undefined,
+    startIndex: number | undefined,
+    endToken: Token | undefined = startToken,
+    endIndex: number | undefined = startIndex
   ) {
     const header = constructHeader(startToken, startIndex, endToken, endIndex)
 

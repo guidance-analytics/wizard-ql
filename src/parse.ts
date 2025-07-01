@@ -22,6 +22,13 @@ export const TOKEN_REGEX = new RegExp(createTokenRegexString(), 'g')
 export const QUOTE_REGEX = new RegExp(createQuoteRegexString())
 export const QUOTE_EDGE_REGEX = new RegExp(`^${createQuoteRegexString()}$`)
 
+interface Context {
+  startToken: Token | undefined
+  startIndex: number | undefined
+  endToken?: Token | undefined
+  endIndex?: number | undefined
+}
+
 /**
  * Take a string, sanitize it, and push it to an array if it has a length
  * @param array The array to push to
@@ -253,13 +260,14 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
  * Validate that a condition meets constraints\
  * This operation mutates the condition to apply the validated field
  * @template T A type record, mapping field names to their types
- * @param                            condition       The condition to validate
- * @param                            constraints     The constraints to check
- * @param                            valueIsImplicit Was this value implicitly inferred? If so, don't attempt stringification
- * @throws  {ConstraintError<false>}
- * @returns                                          The same reference to the condition
+ * @param                     condition       The condition to validate
+ * @param                     constraints     The constraints to check
+ * @param                     valueIsImplicit Was this value implicitly inferred? If so, don't attempt stringification
+ * @param                     ctx             Error Context
+ * @throws  {ConstraintError}
+ * @returns                                   The same reference to the condition
  */
-function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined, valueIsImplicit?: boolean): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
+function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined, valueIsImplicit?: boolean, ctx?: Context): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
   const field = constraints?.caseInsensitive
     ? [...Object.keys(constraints.types ?? {}), ...Object.keys(constraints.restricted ?? {})].find((k) => k.toLowerCase() === condition.field.toLowerCase()) ?? condition.field
@@ -267,7 +275,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   const restriction = constraints?.restricted?.[field]
   const type = constraints?.types?.[field]
 
-  if (constraints?.disallowUnvalidated && restriction === undefined && type === undefined) throw new ConstraintError<false>(`Unknown field "${condition.field}"`)
+  if (constraints?.disallowUnvalidated && restriction === undefined && type === undefined) throw new ConstraintError(`Unknown field "${condition.field}"`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
 
   const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
   const types = type && (Array.isArray(type) ? type : [type])
@@ -299,7 +307,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   const values = Array.isArray(condition.value) ? condition.value : [condition.value]
 
   // Check if this field is allowed to be queried
-  if (restriction === true) throw new ConstraintError<false>(`Field "${condition.field}" is restricted`)
+  if (restriction === true) throw new ConstraintError(`Field "${condition.field}" is restricted`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
   else if (Array.isArray(restriction)) {
     const [philosophy, checks] = restriction
 
@@ -307,18 +315,36 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
       for (const check of checks) {
         if (check instanceof RegExp) {
           if (values.some((v) => check.test(v.toString()))) {
-            throw new ConstraintError<false>(`Value for field "${condition.field}" violates prohibitive pattern constraint "${check.toString()}". Prohibited values/patterns: Allowed values/patterns: ${checks.join(', ')}`)
+            throw new ConstraintError(
+              `Value for field "${condition.field}" violates prohibitive pattern constraint "${check.toString()}". Prohibited values/patterns: Allowed values/patterns: ${checks.join(', ')}`,
+              ctx?.startToken,
+              ctx?.startIndex,
+              ctx?.endToken,
+              ctx?.endIndex
+            )
           }
         } else {
           if (values.includes(check)) {
-            throw new ConstraintError<false>(`Forbidden value "${check}" for field "${condition.field}". Prohibited values/patterns: ${checks.join(', ')}`)
+            throw new ConstraintError(
+              `Forbidden value "${check}" for field "${condition.field}". Prohibited values/patterns: ${checks.join(', ')}`,
+              ctx?.startToken,
+              ctx?.startIndex,
+              ctx?.endToken,
+              ctx?.endIndex
+            )
           }
         }
       }
     } else {
       for (const value of values) {
         if (!checks.some((c) => (c instanceof RegExp && c.test(value.toString())) || c === value)) {
-          throw new ConstraintError<false>(`Value for field "${condition.field}" does not meet any allowed value/pattern. Allowed values/patterns: ${checks.join(', ')}`)
+          throw new ConstraintError(
+            `Value for field "${condition.field}" does not meet any allowed value/pattern. Allowed values/patterns: ${checks.join(', ')}`,
+            ctx?.startToken,
+            ctx?.startIndex,
+            ctx?.endToken,
+            ctx?.endIndex
+          )
         }
       }
     }
@@ -338,7 +364,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
     case 'number': operationAllowed = typeof condition.value === 'number'; break
     case 'array': operationAllowed = Array.isArray(condition.value); break
   }
-  if (!operationAllowed) throw new ConstraintError<false>(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`)
+  if (!operationAllowed) throw new ConstraintError(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
 
   // Check if the value matches the constrained type
   if (types) {
@@ -367,7 +393,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
       })
     })
 
-    if (!meets) throw new ConstraintError<false>(`Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${types.join(', ')}`)
+    if (!meets) throw new ConstraintError(`Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${types.join(', ')}`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
 
     validated = true
   }
@@ -415,14 +441,15 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
   /**
    * Get the expression group to push to (local or a subgroup for inConjunction)
    * @warn You probably need to set inConjunction to false after using this
-   * @returns                     The group to push to
+   * @param                       ctx Error context
+   * @returns                         The group to push to
    * @throws  {ParseError<false>}
    */
-  function getExpressionGroup (): TypedExpression[] {
+  function getExpressionGroup (ctx?: Context): TypedExpression[] {
     if (inConjunction) {
       const prior = expressions.at(-1)
-      if (!prior) throw new ParseError<false>('Unexpected: Expression list empty when parser is meant to append to an AND group')
-      if (prior.type !== 'group' || prior.operation !== 'AND') throw new ParseError<false>('Unexpected: Last expression is not an AND group yet parser thinks it\'s appending to one')
+      if (!prior) throw new ParseError('Unexpected: Expression list empty when parser is meant to append to an AND group', ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
+      if (prior.type !== 'group' || prior.operation !== 'AND') throw new ParseError('Unexpected: Last expression is not an AND group yet parser thinks it\'s appending to one', ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
 
       return prior.constituents
     } return expressions
@@ -430,46 +457,42 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
 
   /**
    * Resolve a condition from the defined variables
-   * @param                                        noopIfFail Don't thow if unable to synthesize the condition
    * @throws {ParseError<false> | ConstraintError}
    */
-  function resolveCondition (noopIfFail?: boolean): void {
-    const group = getExpressionGroup()
-
-    try {
-      if (field && comparisonOperation && value) {
-        if (!expectingExpression) throw new ParseError<false>('Unexpected expression resolution before junctive operator')
-
-        group.push(validateCondition({
-          type: 'condition',
-          field: field.content,
-          operation: comparisonOperation.content,
-          value: value.content
-        }, constraints, value.implicit))
-        inConjunction = false
-        expectingExpression = false
-      } else if (field && !comparisonOperation && !value) {
-        if (!expectingExpression) throw new ParseError<false>('Unexpected expression resolution before junctive operator')
-
-        group.push(validateCondition({
-          type: 'condition',
-          field: field.content,
-          operation: 'EQUAL',
-          value: true
-        }, constraints, true))
-        inConjunction = false
-        expectingExpression = false
-      } else if (field || comparisonOperation || value !== undefined) {
-        if (noopIfFail) return
-        else throw new ParseError<false>('Failed to resolve condition; missing operand or operator')
-      }
-    } catch (err) {
-      if (err instanceof ConstraintError) {
-        const clone = new ConstraintError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
-        clone.stack = err.stack
-        throw clone
-      } else throw err
+  function resolveCondition (ctx?: Context): void {
+    const baseCtx = {
+      startToken: field?.token ?? comparisonOperation?.token ?? value?.token,
+      startIndex: field?.index ?? comparisonOperation?.index ?? value?.index,
+      endToken: value?.token ?? comparisonOperation?.token ?? field?.token,
+      endIndex: value?.index ?? comparisonOperation?.index ?? field?.index
     }
+    if (!ctx) ctx = baseCtx
+
+    const group = getExpressionGroup(ctx)
+
+    if (field && comparisonOperation && value) {
+      if (!expectingExpression) throw new ParseError('Unexpected expression resolution before junctive operator', ctx.startToken, ctx.startIndex, ctx.endToken, ctx.endIndex)
+
+      group.push(validateCondition({
+        type: 'condition',
+        field: field.content,
+        operation: comparisonOperation.content,
+        value: value.content
+      }, constraints, value.implicit, baseCtx))
+      inConjunction = false
+      expectingExpression = false
+    } else if (field && !comparisonOperation && !value) {
+      if (!expectingExpression) throw new ParseError('Unexpected expression resolution before junctive operator', ctx.startToken, ctx.startIndex, ctx.endToken, ctx.endIndex)
+
+      group.push(validateCondition({
+        type: 'condition',
+        field: field.content,
+        operation: 'EQUAL',
+        value: true
+      }, constraints, true, baseCtx))
+      inConjunction = false
+      expectingExpression = false
+    } else if (field || comparisonOperation || value !== undefined) throw new ParseError('Failed to resolve condition; missing operand or operator', ctx.startToken, ctx.startIndex, ctx.endToken, ctx.endIndex)
 
     field = undefined
     comparisonOperation = undefined
@@ -498,17 +521,9 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
       if (subExpression) {
         if (subExpression.type === 'group' && subExpression.operation === groupOperation) expressions.push(...subExpression.constituents)
         else {
-          try {
-            const group = getExpressionGroup()
-            group.push(subExpression)
-            inConjunction = false
-          } catch (err) {
-            if (err instanceof ParseError) {
-              const clone = new ParseError(`Error while parsing group: ${err.message}`, token, _offset + t)
-              clone.stack = err.stack
-              throw clone
-            } else throw err
-          }
+          const group = getExpressionGroup({ startToken: token, startIndex: _offset + t })
+          group.push(subExpression)
+          inConjunction = false
         }
       }
 
@@ -519,15 +534,12 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
     const op = OPERATION_ALIAS_DICTIONARY[token.content as keyof typeof OPERATION_ALIAS_DICTIONARY] as Operation | undefined
 
     if (op && OPERATION_PURPOSE_DICTIONARY[op] === 'junction') {
-      try {
-        resolveCondition()
-      } catch (err) {
-        if (err instanceof ParseError) {
-          const clone = new ParseError(err.rawMessage, field?.token ?? token, field?.index ?? _offset + t, token, _offset + t)
-          clone.stack = err.stack
-          throw clone
-        } else throw err
-      }
+      resolveCondition({
+        startToken: field?.token ?? token,
+        startIndex: field?.index ?? _offset + t,
+        endToken: token,
+        endIndex: _offset + t
+      })
 
       const prior = expressions.at(-1)
       if (!prior) throw new ParseError('Unexpected junction operator with no preceding expression', token, _offset + t)
@@ -588,15 +600,12 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
       const nextToken = tokens[t + 1]
 
       if (nextToken?.content === '(') {
-        try {
-          resolveCondition()
-        } catch (err) {
-          if (err instanceof ParseError) {
-            const clone = new ParseError(err.rawMessage, (field?.token ?? token), field?.index ?? _offset + t, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
-            clone.stack = err.stack
-            throw clone
-          } else throw err
-        }
+        resolveCondition({
+          startToken: (field?.token ?? token),
+          startIndex: field?.index ?? _offset + t,
+          endToken: (value?.token ?? comparisonOperation?.token ?? field?.token),
+          endIndex: (value?.index ?? comparisonOperation?.index ?? field?.index)!
+        })
 
         ++t
 
@@ -612,13 +621,14 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           // Simplification
           if (futureSubExpression.type === 'group' && futureSubExpression.operation === groupOperation) expressions.push(...futureSubExpression.constituents)
           else {
-            try {
-              const group = getExpressionGroup()
-              group.push(futureSubExpression)
-              inConjunction = false
-            } catch (err) {
-              throw new ParseError((err as ParseError).message, token, _offset + t)
-            }
+            const group = getExpressionGroup({
+              startToken: token,
+              startIndex: _offset + t,
+              endToken: tokens[closingIndex],
+              endIndex: closingIndex
+            })
+            group.push(futureSubExpression)
+            inConjunction = false
           }
         }
 
@@ -647,15 +657,12 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         const nextToken = tokens[t + 1]
         if (!nextToken) throw new ParseError('Unexpected "!"', token, _offset + t)
 
-        try {
-          resolveCondition()
-        } catch (err) {
-          if (err instanceof ParseError) {
-            const clone = new ParseError(err.rawMessage, token, _offset + t, nextToken, _offset + t + 1)
-            clone.stack = err.stack
-            throw clone
-          } else throw err
-        }
+        resolveCondition({
+          startToken: token,
+          startIndex: _offset + t,
+          endToken: nextToken,
+          endIndex: _offset + t + 1
+        })
 
         ++t
 
@@ -672,15 +679,12 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           implicit: true
         }
 
-        try {
-          resolveCondition()
-        } catch (err) {
-          if (err instanceof ParseError) {
-            const clone = new ParseError(err.rawMessage, field.token, field.index, nextToken, _offset + t)
-            clone.stack = err.stack
-            throw clone
-          } else throw err
-        }
+        resolveCondition({
+          startToken: field.token,
+          startIndex: field.index,
+          endToken: nextToken,
+          endIndex: _offset + t
+        })
       } else {
         field = {
           content: unescaped,
@@ -756,7 +760,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         resolveEntry(arrayContents.at(-1)!, _offset + t + arrayContents.length - 1)
 
         if (!arr.length) {
-          throw new ParseError('Empty array provided as value', token, _offset + t - 1, tokens[closingIndex]!, _offset + closingIndex)
+          throw new ParseError('Empty array provided as value', token, _offset + t - 1, tokens[closingIndex], _offset + closingIndex)
         }
 
         t = closingIndex
@@ -768,40 +772,33 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         }
       }
 
-      try {
-        resolveCondition()
-      } catch (err) {
-        if (err instanceof ParseError) {
-          const clone = new ParseError(err.rawMessage, field.token, field.index, value.token ?? comparisonOperation?.token ?? field.token, value.index ?? comparisonOperation?.index ?? field.index)
-          clone.stack = err.stack
-          throw clone
-        } else throw err
-      }
+      resolveCondition({
+        startToken: field.token,
+        startIndex: field.index,
+        endToken: value.token ?? comparisonOperation?.token ?? field.token,
+        endIndex: value.index ?? comparisonOperation?.index ?? field.index
+      })
     }
   }
 
-  try {
-    resolveCondition()
-  } catch (err) {
-    if (err instanceof ParseError) {
-      const clone = new ParseError(err.rawMessage, field!.token, field!.index, (value?.token ?? comparisonOperation?.token ?? field?.token)!, (value?.index ?? comparisonOperation?.index ?? field?.index)!)
-      clone.stack = err.stack
+  resolveCondition({
+    startToken: field?.token,
+    startIndex: field?.index,
+    endToken: value?.token ?? comparisonOperation?.token ?? field?.token,
+    endIndex: value?.index ?? comparisonOperation?.index ?? field?.index
+  })
 
-      throw new ParseError(`Reached end of expression with an incomplete condition {${clone.message}}`, tokens.at(-1)!, _offset + tokens.length - 1)
-    } else throw err
-  }
-
-  if (inConjunction) throw new ParseError('Dangling junction operator', tokens.at(-1)!, _offset + tokens.length - 1)
+  if (inConjunction) throw new ParseError('Dangling junction operator', tokens.at(-1), _offset + tokens.length - 1)
 
   if (groupOperation) {
-    if (expressions.length === 1) throw new ParseError('Dangling junction operator', tokens.at(-1)!, _offset + tokens.length - 1)
+    if (expressions.length === 1) throw new ParseError('Dangling junction operator', tokens.at(-1), _offset + tokens.length - 1)
 
     return {
       type: 'group',
       operation: groupOperation,
       constituents: expressions
     }
-  } else if (expressions.length > 1) throw new ParseError('Group possesses multiple conditions without disjunctive operators', tokens[0]!, _offset)
+  } else if (expressions.length > 1) throw new ParseError('Group possesses multiple conditions without disjunctive operators', tokens[0], _offset)
   else return expressions[0] ?? null
 }
 
