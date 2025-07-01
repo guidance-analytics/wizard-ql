@@ -6,7 +6,7 @@
     "module": "ESNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
-    // "allowJs": true,
+    "allowJs": true,
 
     // Bundler mode
     "moduleResolution": "bundler",
@@ -24,5 +24,9 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
+  "include": [
+    "**/*.ts*",
+    "**/*.*js"
+  ],
   "exclude": ["dist/"]
 }

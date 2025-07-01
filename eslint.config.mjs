@@ -6,7 +6,7 @@ const tseslint = neostandard.plugins['typescript-eslint']
 // @ts-expect-error -- typescript-eslint has a goofy return type
 export default [
   ...neostandard({
-    ignores: ['**/*.js'],
+    ignores: ['**/*.js', 'dist/'],
     ts: true,
     env: ['node', 'es2025']
   }),
@@ -14,7 +14,7 @@ export default [
     tseslint.configs.strictTypeChecked,
     tseslint.configs.stylisticTypeChecked,
     {
-      ignores: ['**/*.js'],
+      ignores: ['**/*.js', 'dist/'],
       languageOptions: {
         parser: tseslint.parser,
         parserOptions: {
@@ -131,6 +131,7 @@ export default [
     ...jsdoc.configs['flat/recommended-typescript-error'],
     name: 'jsdoc',
     files: ['**/*.ts*', '**/*.*js'],
+    ignores: ['dist/'],
     plugins: {
       jsdoc
     },
@@ -186,7 +187,8 @@ export default [
   },
   {
     name: 'overrides',
-    files: ['**/*.ts*', '**/*.*js', 'src/graphql/'],
+    files: ['**/*.ts*', '**/*.*js'],
+    ignores: ['dist/'],
     rules: {
       'no-debugger': 'error',
       'no-console': ['error', {
@@ -234,7 +236,8 @@ export default [
   },
   {
     name: 'vanilla overrides',
-    files: ['**/*.*js', 'src/graphql/'],
+    files: ['**/*.*js'],
+    ignores: ['dist/'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
       'jsdoc/check-tag-names': 'off',

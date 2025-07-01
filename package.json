@@ -19,7 +19,8 @@
   "types": "dist/index.d.ts",
   "files": ["dist/"],
   "scripts": {
-    "build": "[ -d dist ] && rm -r dist; bun build --target=node --format=esm --packages external src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json"
+    "build": "[ -d dist ] && rm -r dist; bun build --target=node --format=esm --packages external src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@types/bun": "latest",
