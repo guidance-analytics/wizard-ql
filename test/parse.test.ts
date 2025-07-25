@@ -486,6 +486,8 @@ test('basic parsing errors', () => {
   expect(() => parse('field = "foo" bar or foo'), 'quote literal in the middle').toThrow(ParseError)
   expect(() => parse('field = "foo" or foo "bar"'), 'quote literal at the end').toThrow(ParseError)
   expect(() => parse('= "foo" or foo "bar"'), 'opening with comparison').toThrow(ParseError)
+  expect(() => parse('field : [[bar]]'), 'unescaped bracket in array').toThrow('Unescaped bracket in an array value')
+  expect(() => parse('field : ["[bar]", \\[bar\\]]'), 'unescaped bracket in array').not.toThrow()
 })
 
 test('group disjunction', () => {
@@ -825,6 +827,22 @@ test('type constraints', () => {
     value: [1, 2, 'peanut butter', 4],
     validated: true
   })
+
+  expect(parse('field = 01234'), 'leading zero no type hint').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: 1234,
+    validated: false
+  })
+
+  expect(parse('field = 01234', { types: { field: ['string'] } }), 'leading zero string type hint').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: '01234',
+    validated: false
+  })
 })
 
 test('restriction constraints', () => {
@@ -1019,7 +1037,7 @@ test('date conversion', () => {
     validated: false
   })
 
-  expect(parse('field = 2025-05-16', { interpretDates: true }), 'interpreted pt. 1').toEqual({
+  expect(parse('field = 2025-05-16', { types: { field: 'date' } }), 'interpreted pt. 1').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'EQUAL',
@@ -1028,7 +1046,7 @@ test('date conversion', () => {
   })
 
   const now = new Date()
-  expect(parse(`field = "${now.toISOString()}"`, { interpretDates: true }), 'interpreted pt. 2').toEqual({
+  expect(parse(`field = "${now.toISOString()}"`, { types: { field: 'date' } }), 'interpreted pt. 2').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'EQUAL',
@@ -1036,7 +1054,7 @@ test('date conversion', () => {
     validated: false
   })
 
-  expect(parse('field < foo or field = bar', { interpretDates: (v) => v === 'foo' ? 123 : NaN }), 'custom function').toEqual({
+  expect(parse('field < foo or field = bar', { types: { field: ['date', 'string'] }, dateInterpreter: (v) => v === 'foo' ? new Date(123) : new Date(NaN) }), 'custom function').toEqual({
     type: 'group',
     operation: 'OR',
     constituents: [
@@ -1044,7 +1062,7 @@ test('date conversion', () => {
         type: 'condition',
         field: 'field',
         operation: 'LESS',
-        value: 123,
+        value: new Date(123),
         validated: false
       },
       {
@@ -1057,7 +1075,7 @@ test('date conversion', () => {
     ]
   })
 
-  expect(parse('field matches 2025-05-16', { interpretDates: true }), 'not parsed for string operation').toEqual({
+  expect(parse('field matches 2025-05-16', { types: { field: ['date', 'string'] } }), 'not parsed for string operation').toEqual({
     type: 'condition',
     field: 'field',
     operation: 'MATCH',
@@ -1065,3 +1083,5 @@ test('date conversion', () => {
     validated: false
   })
 })
+
+test.todo('type priority')

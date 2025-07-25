@@ -139,7 +139,8 @@ function parseValue (token: string, isQuoted: boolean): boolean | number | strin
 }
 
 /**
- * Process a token to get its unquoted, escaped, and unescaped varients
+ * Process a token to get its unquoted, escaped, and unescaped varients\
+ * Order: unquote -> escaped -> unescaped
  * @param token The token to process
  * @returns     An object containing the variants
  */
@@ -223,16 +224,20 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
   /**
    * Restricted fields.\
    * Restrict an entire field by setting it to true.\
+   * Restrict an exact value by providing a string.\
+   * Restrict a pattern by providing a Regex expression.\
    * By default allow any value and restrict a collection of values by passing ['deny', VALUES[]]\
    * By default restrict any value and allow a collection of values by passing ['allow', VALUES[]]\
-   * If the field query is of array type, it will check all entries of the array.
-   * @warn If 42 (the number) is prohibited, "42" (the string) will still be allowed
+   * If the query value is of array type, it will check all entries of the array and ensure they're all allowed.\
+   * This check runs before type coercsion so the value checked will always be a string.
    */
-  restricted?: Partial<Record<keyof T | (string & {}), boolean | ['allow' | 'deny', Array<boolean | string | number | RegExp>]>>
+  restricted?: Partial<Record<keyof T | (string & {}), boolean | ['allow' | 'deny', Array<string | RegExp>]>>
 
   /**
    * The types of fields\
-   * Either provide the field type singularly or permit multiple types with an array of field types
+   * Either provide the field type singularly or permit multiple types with an array of field types\
+   * A field with type 'date' will parse the value into a Date object if possible (Wizard will not attempt to do this otherwise)\
+   * Type coercion priority: date -> number -> boolean -> string
    */
   types?: T
 
@@ -249,16 +254,15 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
   disallowUnvalidated?: V
 
   /**
-   * Interpret date string values as numbers\
-   * If true, use `new Date()` constructor to make this determination\
-   * If a callback is passed, use that. A value of `NaN` denotes an invalid date
+   * A callback that determines how dates are interpreted\
+   * By default, uses `new Date()`
    */
-  interpretDates?: boolean | ((v: string) => number)
+  dateInterpreter?: (v: string | number) => Date
 }
 
 /**
- * Validate that a condition meets constraints\
- * This operation mutates the condition to apply the validated field
+ * Validate that a condition meets constraints
+ * @warn This operation mutates the condition to apply the validated field and perform type coercion
  * @template T A type record, mapping field names to their types
  * @param                     condition       The condition to validate
  * @param                     constraints     The constraints to check
@@ -267,7 +271,7 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
  * @throws  {ConstraintError}
  * @returns                                   The same reference to the condition
  */
-function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated'>, constraints: ExpressionConstraints<T, V> | undefined, valueIsImplicit?: boolean, ctx?: Context): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
+function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated' | 'value'> & { value: string | string[] }, constraints: ExpressionConstraints<T, V> | undefined, valueIsImplicit?: boolean, ctx?: Context): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
   const field = constraints?.caseInsensitive
     ? [...Object.keys(constraints.types ?? {}), ...Object.keys(constraints.restricted ?? {})].find((k) => k.toLowerCase() === condition.field.toLowerCase()) ?? condition.field
@@ -280,29 +284,28 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
   const types = type && (Array.isArray(type) ? type : [type])
 
-  // Date interpretation
-  // Mutates
-  if (!valueIsImplicit && constraints?.interpretDates && (!types || types.includes('number')) && ['primitive', 'number'].includes(operationType)) {
-    const validator = constraints.interpretDates === true ? (v: string) => +new Date(v) : constraints.interpretDates
+  // // Date interpretation
+  // // Mutates
+  // if (!valueIsImplicit && constraints?.interpretDates && (!types || types.includes('number')) && ['primitive', 'number'].includes(operationType)) {
 
-    if (Array.isArray(condition.value)) {
-      for (let v = 0; v < condition.value.length; ++v) {
-        const val = condition.value[v]
+  //   if (Array.isArray(condition.value)) {
+  //     for (let v = 0; v < condition.value.length; ++v) {
+  //       const val = condition.value[v]
 
-        if (typeof val === 'string') {
-          const numberized = validator(val)
-          if (!isNaN(numberized)) condition.value[v] = numberized
-        }
-      }
-    } else {
-      const val = condition.value
+  //       if (typeof val === 'string') {
+  //         const numberized = validator(val)
+  //         if (!isNaN(numberized)) condition.value[v] = numberized
+  //       }
+  //     }
+  //   } else {
+  //     const val = condition.value
 
-      if (typeof val === 'string') {
-        const numberized = validator(val)
-        if (!isNaN(numberized)) condition.value = numberized
-      }
-    }
-  }
+  //     if (typeof val === 'string') {
+  //       const numberized = validator(val)
+  //       if (!isNaN(numberized)) condition.value = numberized
+  //     }
+  //   }
+  // }
 
   const values = Array.isArray(condition.value) ? condition.value : [condition.value]
 
@@ -354,46 +357,80 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
 
   // If this is a string operation and value is a number or boolean, stringify it
   // Mutates
-  if (!valueIsImplicit && operationType === 'string' && (typeof condition.value === 'number' || typeof condition.value === 'boolean')) condition.value = condition.value.toString()
+  // if (!valueIsImplicit && operationType === 'string' && (typeof condition.value === 'number' || typeof condition.value === 'boolean')) condition.value = condition.value.toString()
 
-  // Check if the value matches the operation's expected type
-  let operationAllowed: boolean
-  switch (operationType) {
-    case 'primitive': operationAllowed = !Array.isArray(condition.value); break
-    case 'string': operationAllowed = typeof condition.value === 'string'; break
-    case 'number': operationAllowed = typeof condition.value === 'number'; break
-    case 'array': operationAllowed = Array.isArray(condition.value); break
-  }
-  if (!operationAllowed) throw new ConstraintError(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
+  const dateInterpreter = constraints?.dateInterpreter ?? ((v: string | number) => new Date(v))
 
-  // Check if the value matches the constrained type
+  // Employ type coercion and see if the type works
   if (types) {
     const meets = values.every((v, i) => {
-      // Stringify value if strings are allowed and numbers/booleans aren't
       // Mutates
-      if (
-        !valueIsImplicit &&
-        (
-          (typeof v === 'number' && !types.includes('number')) ||
-          (typeof v === 'boolean' && !types.includes('boolean'))
-        ) && types.includes('string')
-      ) {
-        v = v.toString()
-        values[i] = v
-        if (!Array.isArray(condition.value)) condition.value = v
-      }
+      const {
+        unquoted,
+        escaped,
+        unescaped
+      } = processToken(v)
+
+      // if (
+      //   !valueIsImplicit &&
+      //   (
+      //     (typeof v === 'number' && !types.includes('number')) ||
+      //     (typeof v === 'boolean' && !types.includes('boolean'))
+      //   ) && types.includes('string')
+      // ) {
+      //   v = v.toString()
+      //   values[i] = v
+      //   if (!Array.isArray(condition.value)) condition.value = v
+      // }
 
       return types.some((t) => {
-        switch (t) { // Don't do direct string comparison to leave possibility for custom non-JS types
-          case 'boolean': return typeof v === 'boolean'
-          case 'number': return typeof v === 'number'
-          case 'string': return typeof v === 'string'
+        let value: Primitive = unescaped
+
+        switch (t) {
+          case 'boolean':
+            if (v === 'true') value = true
+            else if (v === 'false') value = false
+            else return false
+
+            break
+          case 'number': {
+            const num = Number(v)
+            if (isNaN(num)) return false
+
+            value = num
+
+            break
+          }
+          case 'string': break
+          case 'date': {
+            const num = Number(v)
+            const date = dateInterpreter(isNaN(num) ? num : unescaped)
+            if (isNaN(+date)) return false
+
+            value = date
+            break
+          }
           default: return false
         }
+
+        (values as Primitive[])[i] = value
+        if (!Array.isArray(condition.value)) (condition.value as Primitive) = value
+
+        return true
       })
     })
 
     if (!meets) throw new ConstraintError(`Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${types.join(', ')}`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
+
+    // Check if the value matches the operation's expected type
+    let operationAllowed: boolean
+    switch (operationType) {
+      case 'primitive': operationAllowed = !Array.isArray(condition.value); break
+      case 'string': operationAllowed = typeof condition.value === 'string'; break
+      case 'numeric': operationAllowed = condition.value instanceof Date || typeof condition.value === 'number'; break
+      case 'array': operationAllowed = Array.isArray(condition.value); break
+    }
+    if (!operationAllowed) throw new ConstraintError(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
 
     validated = true
   }
@@ -427,7 +464,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
     index?: number
   } | undefined
   let value: {
-    content: Primitive | Primitive[]
+    content: string | string[]
     token?: Token
     index?: number
     implicit?: boolean
@@ -488,7 +525,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         type: 'condition',
         field: field.content,
         operation: 'EQUAL',
-        value: true
+        value: 'true'
       }, constraints, true, baseCtx))
       inConjunction = false
       expectingExpression = false
@@ -501,10 +538,6 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
 
   for (let t = 0; t < tokens.length; ++t) {
     const token = tokens[t]!
-    const {
-      unquoted,
-      unescaped
-    } = processToken(token.content)
 
     if (token.content === ')') throw new ParseError('Unexpected closing parenthesis', token, _offset + t)
     if ([']', '}'].includes(token.content)) throw new ParseError('Unexpected closing bracket/brace', token, _offset + t)
@@ -675,7 +708,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
           content: 'EQUAL'
         }
         value = {
-          content: false,
+          content: 'false',
           implicit: true
         }
 
@@ -687,7 +720,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         })
       } else {
         field = {
-          content: unescaped,
+          content: processToken(token.content).unescaped,
           token,
           index: _offset + t
         }
@@ -703,7 +736,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
 
         ++t
 
-        const arr: Primitive[] = []
+        const arr: string[] = []
         value = {
           content: arr,
           token: tokens[closingIndex],
@@ -720,8 +753,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         function resolveEntry (subtoken: Token, subindex: number): void {
           if (workingEntry) {
             const {
-              unquoted: unquotedWorkingEntry,
-              unescaped: unescapedWorkingEntry
+              unquoted: unquotedWorkingEntry
             } = processToken(workingEntry)
 
             const subquotes = workingEntry.match(QUOTE_REGEX)
@@ -733,7 +765,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
               )
             ) throw new ParseError('Unescaped bracket in an array value', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
 
-            arr.push(parseValue(unescapedWorkingEntry, unquotedWorkingEntry !== undefined))
+            arr.push(token.content)
             workingEntry = ''
             firstEntryToken = undefined
             firstEntryTokenIndex = undefined
@@ -766,7 +798,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         t = closingIndex
       } else {
         value = {
-          content: parseValue(unescaped, unquoted !== undefined),
+          content: token.content,
           token,
           index: _offset + t
         }

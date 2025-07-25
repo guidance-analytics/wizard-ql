@@ -6,18 +6,27 @@
   },
   "homepage": "https://github.com/guidance-analytics/wizard-ql",
   "description": "WizardQL is a natural-language-like query language for constructing data queries for resources that meet conditions.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/guidance-analytics/wizard-ql.git"
+    "url": "git+https://github.com/guidance-analytics/wizard-ql.git"
   },
-  "keywords": ["query", "language", "querylanguage", "parser", "cel", "expression"],
+  "keywords": [
+    "query",
+    "language",
+    "querylanguage",
+    "parser",
+    "cel",
+    "expression"
+  ],
   "license": "Apache-2.0",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "type": "module",
   "types": "dist/index.d.ts",
-  "files": ["dist/"],
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "build": "[ -d dist ] && rm -r dist; bun build --target=node --format=esm --packages external src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json",
     "lint": "eslint ."

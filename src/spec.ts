@@ -91,15 +91,15 @@ type KeysWhereValue<T, V> = Exclude<{
 export type JunctionOperation = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'junction'>
 export type ComparisonOperation = KeysWhereValue<typeof OPERATION_PURPOSE_DICTIONARY, 'comparison'>
 
-type ComparisonValueType = 'primitive' | 'boolean' | 'string' | 'number' | 'array'
+type ComparisonValueType = 'primitive' | 'boolean' | 'string' | 'number' | 'date' | 'numeric' | 'array'
 /** All comparison operations and their types */
 export const COMPARISON_TYPE_DICTIONARY = {
   EQUAL: 'primitive',
   NOTEQUAL: 'primitive',
-  GEQ: 'number',
-  GREATER: 'number',
-  LEQ: 'number',
-  LESS: 'number',
+  GEQ: 'numeric',
+  GREATER: 'numeric',
+  LEQ: 'numeric',
+  LESS: 'numeric',
   IN: 'array',
   NOTIN: 'array',
   MATCH: 'string',
@@ -111,10 +111,12 @@ export type ComparisonTypeToTSType<T extends keyof typeof COMPARISON_TYPE_DICTIO
   boolean: boolean
   string: string
   number: number
+  date: Date
+  numeric: number | Date
   array: Primitive[]
 }[typeof COMPARISON_TYPE_DICTIONARY[T]]
 
-export type FieldType = 'boolean' | 'string' | 'number'
+export type FieldType = 'boolean' | 'string' | 'number' | 'date'
 export type TypeRecord = Record<string, FieldType | FieldType[]>
 
 /** Convert a field type string to a language server type */
@@ -122,6 +124,7 @@ export type FieldTypeToTSType<T extends FieldType> = {
   boolean: boolean
   string: string
   number: number
+  date: Date
 }[T]
 /** Primitive values that can be used in comparisons */
 export type Primitive = FieldTypeToTSType<FieldType>
