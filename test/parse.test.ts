@@ -841,7 +841,7 @@ test('type constraints', () => {
     field: 'field',
     operation: 'EQUAL',
     value: '01234',
-    validated: false
+    validated: true
   })
 })
 
@@ -1041,8 +1041,8 @@ test('date conversion', () => {
     type: 'condition',
     field: 'field',
     operation: 'EQUAL',
-    value: 1747353600000,
-    validated: false
+    value: new Date('2025-05-16'),
+    validated: true
   })
 
   const now = new Date()
@@ -1050,8 +1050,8 @@ test('date conversion', () => {
     type: 'condition',
     field: 'field',
     operation: 'EQUAL',
-    value: now.getTime(),
-    validated: false
+    value: now,
+    validated: true
   })
 
   expect(parse('field < foo or field = bar', { types: { field: ['date', 'string'] }, dateInterpreter: (v) => v === 'foo' ? new Date(123) : new Date(NaN) }), 'custom function').toEqual({
@@ -1063,14 +1063,14 @@ test('date conversion', () => {
         field: 'field',
         operation: 'LESS',
         value: new Date(123),
-        validated: false
+        validated: true
       },
       {
         type: 'condition',
         field: 'field',
         operation: 'EQUAL',
         value: 'bar',
-        validated: false
+        validated: true
       }
     ]
   })
@@ -1080,7 +1080,7 @@ test('date conversion', () => {
     field: 'field',
     operation: 'MATCH',
     value: '2025-05-16',
-    validated: false
+    validated: true
   })
 })
 

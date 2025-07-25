@@ -4,6 +4,7 @@ import {
   type ComparisonOperation,
   type ConvertTypeRecord,
   type Expression,
+  type FieldType,
   type Group,
   type JunctionOperation,
   type Operation,
@@ -13,7 +14,8 @@ import {
   type UncheckedCondition,
   COMPARISON_TYPE_DICTIONARY,
   OPERATION_ALIAS_DICTIONARY,
-  OPERATION_PURPOSE_DICTIONARY
+  OPERATION_PURPOSE_DICTIONARY,
+  TYPE_PRIORITY
 } from './spec'
 
 import { ConstraintError, ParseError } from './errors'
@@ -128,17 +130,6 @@ export function tokenize (expression: string): Token[] {
 }
 
 /**
- * Parse a value as a number or a string depending on its parsability and whether its wrapped in quotes or not
- * @param token    The token
- * @param isQuoted Is the token quoted?
- * @returns        The parsed token
- */
-function parseValue (token: string, isQuoted: boolean): boolean | number | string {
-  const number = Number(token)
-  return isQuoted || isNaN(number) ? token === 'true' ? true : token === 'false' ? false : token : number
-}
-
-/**
  * Process a token to get its unquoted, escaped, and unescaped varients\
  * Order: unquote -> escaped -> unescaped
  * @param token The token to process
@@ -237,7 +228,7 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
    * The types of fields\
    * Either provide the field type singularly or permit multiple types with an array of field types\
    * A field with type 'date' will parse the value into a Date object if possible (Wizard will not attempt to do this otherwise)\
-   * Type coercion priority: date -> number -> boolean -> string
+   * Type coercion priority: boolean -> date -> number -> string
    */
   types?: T
 
@@ -258,6 +249,58 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
    * By default, uses `new Date()`
    */
   dateInterpreter?: (v: string | number) => Date
+}
+
+/**
+ * Coerce a string into the appropriate type for the operation based on the field type and operator
+ * @param           value           The value to coerce
+ * @param           fieldTypes      The supported field types
+ * @param           operatorTypes   The supported operator types
+ * @param           dateInterpreter The date interpreter function
+ * @returns                         The coerced type
+ * @throws  {Error}                 Message is 'operator' if the operator type cannot be coerced and 'field' if the field type cannot be coerced
+ */
+function coerceType (value: string, fieldTypes: FieldType[], operatorTypes: FieldType[], dateInterpreter: (v: string | number) => Date): Primitive {
+  const { unescaped } = processToken(value)
+
+  let operatorHits = 0
+  let fieldHits = 0
+  for (const type of TYPE_PRIORITY) {
+    const operatorHit = operatorTypes.includes(type)
+    const fieldHit = fieldTypes.includes(type)
+    if (operatorHit) ++operatorHits
+    if (fieldHit) ++fieldHits
+    if (!operatorHit || !fieldHit) continue
+
+    switch (type) {
+      case 'boolean':
+        if (value === 'true') return true
+        else if (value === 'false') return false
+
+        break
+      case 'number': {
+        const num = Number(value)
+        if (isNaN(num)) break
+
+        return num
+      }
+      case 'string': return unescaped
+      case 'date': {
+        const num = Number(value)
+        const date = dateInterpreter(isNaN(num) ? unescaped : num)
+        if (isNaN(+date)) break
+
+        return date
+      }
+    }
+
+    if (operatorTypes.includes(type)) --operatorHits
+    if (fieldTypes.includes(type)) --fieldHits
+  }
+
+  if (!operatorHits) throw new Error('operator')
+  if (!fieldHits) throw new Error('field')
+  throw new Error('operator')
 }
 
 /**
@@ -283,29 +326,6 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
 
   const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
   const types = type && (Array.isArray(type) ? type : [type])
-
-  // // Date interpretation
-  // // Mutates
-  // if (!valueIsImplicit && constraints?.interpretDates && (!types || types.includes('number')) && ['primitive', 'number'].includes(operationType)) {
-
-  //   if (Array.isArray(condition.value)) {
-  //     for (let v = 0; v < condition.value.length; ++v) {
-  //       const val = condition.value[v]
-
-  //       if (typeof val === 'string') {
-  //         const numberized = validator(val)
-  //         if (!isNaN(numberized)) condition.value[v] = numberized
-  //       }
-  //     }
-  //   } else {
-  //     const val = condition.value
-
-  //     if (typeof val === 'string') {
-  //       const numberized = validator(val)
-  //       if (!isNaN(numberized)) condition.value = numberized
-  //     }
-  //   }
-  // }
 
   const values = Array.isArray(condition.value) ? condition.value : [condition.value]
 
@@ -355,85 +375,44 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
     validated = true
   }
 
-  // If this is a string operation and value is a number or boolean, stringify it
-  // Mutates
-  // if (!valueIsImplicit && operationType === 'string' && (typeof condition.value === 'number' || typeof condition.value === 'boolean')) condition.value = condition.value.toString()
+  if (operationType === 'array' && !Array.isArray(condition.value)) throw new ConstraintError(`Value "${condition.value.toString()}" is not permitted for "${condition.operation}" which expects an array`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
+  else if (operationType !== 'array' && Array.isArray(condition.value)) throw new ConstraintError(`Value "${condition.value.toString()}" is not permitted for "${condition.operation}" which expects a non-array value`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
 
   const dateInterpreter = constraints?.dateInterpreter ?? ((v: string | number) => new Date(v))
 
   // Employ type coercion and see if the type works
-  if (types) {
-    const meets = values.every((v, i) => {
-      // Mutates
-      const {
-        unquoted,
-        escaped,
-        unescaped
-      } = processToken(v)
+  for (let i = 0; i < values.length; ++i) {
+    const v = values[i]!
 
-      // if (
-      //   !valueIsImplicit &&
-      //   (
-      //     (typeof v === 'number' && !types.includes('number')) ||
-      //     (typeof v === 'boolean' && !types.includes('boolean'))
-      //   ) && types.includes('string')
-      // ) {
-      //   v = v.toString()
-      //   values[i] = v
-      //   if (!Array.isArray(condition.value)) condition.value = v
-      // }
-
-      return types.some((t) => {
-        let value: Primitive = unescaped
-
-        switch (t) {
-          case 'boolean':
-            if (v === 'true') value = true
-            else if (v === 'false') value = false
-            else return false
-
-            break
-          case 'number': {
-            const num = Number(v)
-            if (isNaN(num)) return false
-
-            value = num
-
-            break
-          }
-          case 'string': break
-          case 'date': {
-            const num = Number(v)
-            const date = dateInterpreter(isNaN(num) ? num : unescaped)
-            if (isNaN(+date)) return false
-
-            value = date
-            break
-          }
-          default: return false
-        }
-
-        (values as Primitive[])[i] = value
-        if (!Array.isArray(condition.value)) (condition.value as Primitive) = value
-
-        return true
-      })
-    })
-
-    if (!meets) throw new ConstraintError(`Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${types.join(', ')}`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
-
-    // Check if the value matches the operation's expected type
-    let operationAllowed: boolean
-    switch (operationType) {
-      case 'primitive': operationAllowed = !Array.isArray(condition.value); break
-      case 'string': operationAllowed = typeof condition.value === 'string'; break
-      case 'numeric': operationAllowed = condition.value instanceof Date || typeof condition.value === 'number'; break
-      case 'array': operationAllowed = Array.isArray(condition.value); break
+    let opTypes: FieldType[]
+    if (valueIsImplicit) opTypes = ['boolean']
+    else {
+      switch (operationType) {
+        case 'primitive':
+        case 'array':
+          opTypes = ['boolean', 'number', 'string']
+          if (types?.includes('date')) opTypes.push('date')
+          break
+        case 'numeric':
+          opTypes = ['number']
+          if (types?.includes('date')) opTypes.push('date')
+          break
+        case 'string': opTypes = ['string']; break
+      }
     }
-    if (!operationAllowed) throw new ConstraintError(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
 
-    validated = true
+    try {
+      const value = coerceType(v, types ?? opTypes, opTypes, dateInterpreter)
+      ;(values as Primitive[])[i] = value
+      if (!Array.isArray(condition.value)) (condition.value as Primitive) = value
+    } catch (err) {
+      switch ((err as Error).message) {
+        case 'operator': throw new ConstraintError(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
+        case 'field': throw new ConstraintError(`Value "${condition.value.toString()}" includes a type not permitted for field "${condition.field}". Allowed types: ${(types ?? opTypes).join(', ')}`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
+      }
+    }
   }
+  if (types) validated = true
 
   // Mutate
   const edit = condition as ReturnType<typeof validateCondition<T, V>>
@@ -765,7 +744,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
               )
             ) throw new ParseError('Unescaped bracket in an array value', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
 
-            arr.push(token.content)
+            arr.push(workingEntry)
             workingEntry = ''
             firstEntryToken = undefined
             firstEntryTokenIndex = undefined

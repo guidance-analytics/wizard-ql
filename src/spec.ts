@@ -133,6 +133,8 @@ export type ConvertTypeRecord<T extends TypeRecord> = {
   [K in keyof T]: (T[K] extends FieldType[] ? FieldTypeToTSType<T[K][number]> : T[K] extends FieldType ? FieldTypeToTSType<T[K]> : Primitive) & Primitive
 }
 
+export const TYPE_PRIORITY = ['boolean', 'date', 'number', 'string'] as const satisfies FieldType[]
+
 /**
  * A group of conditions joined by a junction operator
  * @template R A record mapping field names to values
