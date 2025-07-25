@@ -258,7 +258,7 @@ Values can be direct values (string, number, boolean) or regex expressions
 "deny" will deny the values/patterns and allow all others
 
 ### `types`
-A record mapping field names to (`boolean`, `string`, `number`). The value in the record can either be a single allowed type or an array of allowed types. Only operators that can function on that type can be used for that field. By default, fields will be treated as being able to be any of the three types.
+A record mapping field names to (`boolean`, `string`, `number`, `date`). The value in the record can either be a single allowed type or an array of allowed types. Only operators that can function on that type can be used for that field. By default, fields will be treated as being able to be any of the three types.
 
 > Example:
 > ```js
@@ -269,6 +269,12 @@ A record mapping field names to (`boolean`, `string`, `number`). The value in th
 >   }
 > })
 > ```
+
+> [!NOTE]
+> A value will only be attempted to be parsed as a date if `'date'` is included in the field's type record.
+
+The type coercion priority chain is as follows:
+`boolean` -> `date` -> `number` -> `string`
 
 ### Regarding constraints: `validated` property
 When a field has matched either a key in `types` or a field in `restricted`, the `validated` property on the parsed condition will be true. This is due to a limitation with TypeScript's type checking.
@@ -306,10 +312,10 @@ Type/constraint checks will be case-insensitive on the field name
 ### `disallowUnvalidated`
 Fields that are not present in the type or restriction record will considered invalid fields
 
-### `interpretDates`
-If a field is set as a number, dates-like strings will still be interpreted and converted to their millisecond representations.
+### `dateInterpreter`
+A callback that determines how WizardQL interprets dates. Wizard will attempt to parse a value as a date if `'date'` is supplied in its type record
 
-`true` can be passed to enable this feature, using `new Date()` to parse dates or a custom callback can be passed.
+By default, this is simply `(v) => new Date(v)`
 
 ## Stringification
 Parsed expressions can be converted back into strings using the `stringify` function. The stringify function comes with its own slew of options as its second parameter
