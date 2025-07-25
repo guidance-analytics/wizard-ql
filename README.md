@@ -272,9 +272,12 @@ A record mapping field names to (`boolean`, `string`, `number`, `date`). The val
 
 > [!NOTE]
 > A value will only be attempted to be parsed as a date if `'date'` is included in the field's type record.
+> If the value is a number, it will be parsed as number of milliseconds. Any non-number character will cause the value to be parsed as a string
 
 The type coercion priority chain is as follows:
 `boolean` -> `date` -> `number` -> `string`
+> [!WARNING]
+> This can cause issues for numbers with leading zeros. If this is a potential problem, make sure to exclude `number` from the types and include `string`
 
 ### Regarding constraints: `validated` property
 When a field has matched either a key in `types` or a field in `restricted`, the `validated` property on the parsed condition will be true. This is due to a limitation with TypeScript's type checking.

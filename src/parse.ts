@@ -381,6 +381,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   const dateInterpreter = constraints?.dateInterpreter ?? ((v: string | number) => new Date(v))
 
   // Employ type coercion and see if the type works
+  // Mutate
   for (let i = 0; i < values.length; ++i) {
     const v = values[i]!
 

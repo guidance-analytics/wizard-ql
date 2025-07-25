@@ -1084,4 +1084,52 @@ test('date conversion', () => {
   })
 })
 
-test.todo('type priority')
+test('type priority', () => {
+  expect(parse('field = true', { types: { field: ['string', 'number', 'boolean', 'date'] } }), 'boolean').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: true,
+    validated: true
+  })
+
+  expect(parse('field = true', { types: { field: ['string', 'number', 'date'] } }), 'no boolean').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: 'true',
+    validated: true
+  })
+
+  expect(parse('field = 2025', { types: { field: ['string', 'number', 'boolean', 'date'] } }), 'date as number').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: new Date(2025),
+    validated: true
+  })
+
+  expect(parse('field = 2025-02', { types: { field: ['string', 'number', 'boolean', 'date'] } }), 'date as string').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: new Date('2025-02'),
+    validated: true
+  })
+
+  expect(parse('field = 2025', { types: { field: ['string', 'number', 'boolean'] } }), 'number').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: 2025,
+    validated: true
+  })
+
+  expect(parse('field = 2025', { types: { field: ['string'] } }), 'string').toEqual({
+    type: 'condition',
+    field: 'field',
+    operation: 'EQUAL',
+    value: '2025',
+    validated: true
+  })
+})
