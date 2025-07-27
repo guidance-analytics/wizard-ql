@@ -3,6 +3,7 @@ export {
   type ComparisonOperation,
   type JunctionOperation,
   type Expression,
+  type UncheckedExpression,
   type Condition,
   type UncheckedCondition,
   type Group,

@@ -130,7 +130,11 @@ export type FieldTypeToTSType<T extends FieldType> = {
 export type Primitive = FieldTypeToTSType<FieldType>
 /** Convert input type record to language server type record */
 export type ConvertTypeRecord<T extends TypeRecord> = {
-  [K in keyof T]: (T[K] extends FieldType[] ? FieldTypeToTSType<T[K][number]> : T[K] extends FieldType ? FieldTypeToTSType<T[K]> : Primitive) & Primitive
+  [K in keyof T]: T[K] extends FieldType[]
+    ? FieldTypeToTSType<T[K][number]>
+    : T[K] extends FieldType
+      ? FieldTypeToTSType<T[K]>
+      : Primitive
 }
 
 export const TYPE_PRIORITY = ['boolean', 'date', 'number', 'string'] as const satisfies FieldType[]
@@ -139,7 +143,7 @@ export const TYPE_PRIORITY = ['boolean', 'date', 'number', 'string'] as const sa
  * A group of conditions joined by a junction operator
  * @template R A record mapping field names to values
  */
-export interface Group<R extends Record<string, Primitive> = Record<string, Primitive>, V extends boolean = false> {
+export interface Group<R extends Record<string, unknown> = Record<string, Primitive>, V extends boolean = false> {
   type: 'group'
   /** The junction operator */
   operation: JunctionOperation
@@ -151,14 +155,14 @@ export interface Group<R extends Record<string, Primitive> = Record<string, Prim
  * @template R A record mapping field names to values
  * @template F The name of the field being queried
  */
-export interface Condition<R extends Record<string, Primitive>, F extends keyof R, O extends ComparisonOperation> {
+export interface Condition<R extends Record<string, unknown>, F extends keyof R, O extends ComparisonOperation> {
   type: 'condition'
   /** The operation */
   operation: O
   /** The name of the field */
   field: F
   /** The value being checked */
-  value: typeof COMPARISON_TYPE_DICTIONARY[O] extends 'array' ? Array<R[F]> : R[F] & ComparisonTypeToTSType<O>
+  value: typeof COMPARISON_TYPE_DICTIONARY[O] extends 'array' ? Array<R[F]> : Extract<ComparisonTypeToTSType<O>, R[F]>
   /** Was this condition validated by the constraints or is its type unknown? */
   validated: true
 }
@@ -172,7 +176,7 @@ export interface UncheckedCondition<O extends ComparisonOperation = ComparisonOp
   /** The name of the field */
   field: string
   /** The value being checked */
-  value: ComparisonTypeToTSType<O>
+  value: Exclude<ComparisonTypeToTSType<O>, Date>
   /** Was this condition validated by the constraints or is its type unknown? */
   validated: false
 }
@@ -186,7 +190,7 @@ type ReverseAggregate<T extends Record<any, any>> = {
 }
 type ReverseAggregatedTypes = ReverseAggregate<typeof COMPARISON_TYPE_DICTIONARY>
 /** Create a union of conditions; an intersection of the operation type validation and constraint type validation */
-export type CheckedConditionSpread<R extends Record<string, Primitive>> = {
+export type CheckedConditionSpread<R extends Record<string, unknown>> = {
   [K in keyof R]: {
     [O in keyof ReverseAggregatedTypes]: Condition<R, K, ReverseAggregatedTypes[O]>
   }[keyof ReverseAggregatedTypes]
@@ -196,7 +200,9 @@ export type UncheckedConditionSpread = {
   [O in keyof ReverseAggregatedTypes]: UncheckedCondition<ReverseAggregatedTypes[O]>
 }[keyof ReverseAggregatedTypes]
 
-export type Expression<R extends Record<string, Primitive> = Record<string, Primitive>, V extends boolean = false> =
+export type Expression<R extends Record<string, unknown> = Record<string, Primitive>, V extends boolean = false> =
   Group<R, V> | (V extends true
     ? CheckedConditionSpread<R>
     : CheckedConditionSpread<R> | UncheckedConditionSpread)
+
+export type UncheckedExpression = (Omit<Group, 'constituents'> & { constituents: UncheckedExpression[] }) | UncheckedConditionSpread

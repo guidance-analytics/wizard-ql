@@ -182,7 +182,7 @@ function getClosingIndex (tokens: Token[], start: number, opening: string, closi
  * (Mutating operation)
  * @param expression The expression
  */
-function complementExpression<R extends Record<string, Primitive>> (expression: Expression<R>): void {
+function complementExpression<R extends Record<string, unknown>> (expression: Expression<R>): void {
   switch (expression.type) {
     case 'group':
       switch (expression.operation) {
@@ -822,7 +822,13 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
  * @returns                                            The object representation
  * @throws  {ParseError | ConstraintError}
  */
-export function parse<const T extends TypeRecord, const V extends boolean> (expression: string | string[] | Token[], constraints?: ExpressionConstraints<T, V>): Expression<ConvertTypeRecord<T>, V> | null {
+export function parse<
+  const T extends TypeRecord = {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
+  const V extends boolean = false
+> (
+  expression: string | string[] | Token[],
+  constraints?: ExpressionConstraints<T, V>
+): Expression<ConvertTypeRecord<T>, V> | null {
   let tokens: Token[]
 
   if (Array.isArray(expression)) {
