@@ -72,18 +72,27 @@ function _tokenize (expression: string, pattern: RegExp): Token[] {
       }
       tokens.push(startToken)
 
+      let subopenings = 0
       let endToken: Token | undefined
       for (const submatch of matches) {
+        if (
+          (match[0] === submatch[0]) ||
+          (match[0] === submatch[0])
+        ) ++subopenings
+
         if (
           (match[0] === '[' && submatch[0] === ']') ||
           (match[0] === '{' && submatch[0] === '}')
         ) {
-          endToken = {
-            content: submatch[0],
-            index: submatch.index
-          }
+          if (subopenings) --subopenings
+          else {
+            endToken = {
+              content: submatch[0],
+              index: submatch.index
+            }
 
-          break
+            break
+          }
         }
       }
 
@@ -136,6 +145,8 @@ export function tokenize (expression: string): Token[] {
  * @returns     An object containing the variants
  */
 function processToken (token: string): {
+  /** The raw token */
+  raw: string
   /** The token's quote contents, if surrounded by quotes */
   unquoted: string | undefined
   /** The token's resolved contents or quote contents, including escape backslashes */
@@ -148,6 +159,7 @@ function processToken (token: string): {
   const unescaped = escaped.replaceAll(new RegExp(`(?<!${ESCAPE_REGEX}\\\\)\\\\`, 'g'), '')
 
   return {
+    raw: token,
     unquoted,
     escaped,
     unescaped
@@ -220,7 +232,7 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
    * By default allow any value and restrict a collection of values by passing ['deny', VALUES[]]\
    * By default restrict any value and allow a collection of values by passing ['allow', VALUES[]]\
    * If the query value is of array type, it will check all entries of the array and ensure they're all allowed.\
-   * This check runs before type coercsion so the value checked will always be a string.
+   * This check runs before type coercion so the value checked will always be a string. However, quotes and escapes WILL be removed
    */
   restricted?: Partial<Record<keyof T | (string & {}), boolean | ['allow' | 'deny', Array<string | RegExp>]>>
 
@@ -253,15 +265,15 @@ export interface ExpressionConstraints<T extends TypeRecord, V extends boolean> 
 
 /**
  * Coerce a string into the appropriate type for the operation based on the field type and operator
- * @param           value           The value to coerce
+ * @param           processedToken  The value to coerce (already processed)
  * @param           fieldTypes      The supported field types
  * @param           operatorTypes   The supported operator types
  * @param           dateInterpreter The date interpreter function
  * @returns                         The coerced type
  * @throws  {Error}                 Message is 'operator' if the operator type cannot be coerced and 'field' if the field type cannot be coerced
  */
-function coerceType (value: string, fieldTypes: FieldType[], operatorTypes: FieldType[], dateInterpreter: (v: string | number) => Date): Primitive {
-  const { unescaped } = processToken(value)
+function coerceType (processedToken: ReturnType<typeof processToken>, fieldTypes: FieldType[], operatorTypes: FieldType[], dateInterpreter: (v: string | number) => Date): Primitive {
+  const { raw, unescaped } = processedToken
 
   let operatorHits = 0
   let fieldHits = 0
@@ -274,19 +286,19 @@ function coerceType (value: string, fieldTypes: FieldType[], operatorTypes: Fiel
 
     switch (type) {
       case 'boolean':
-        if (value === 'true') return true
-        else if (value === 'false') return false
+        if (raw === 'true') return true
+        else if (raw === 'false') return false
 
         break
       case 'number': {
-        const num = Number(value)
+        const num = Number(raw)
         if (isNaN(num)) break
 
         return num
       }
       case 'string': return unescaped
       case 'date': {
-        const num = Number(value)
+        const num = Number(raw)
         const date = dateInterpreter(isNaN(num) ? unescaped : num)
         if (isNaN(+date)) break
 
@@ -316,6 +328,7 @@ function coerceType (value: string, fieldTypes: FieldType[], operatorTypes: Fiel
  */
 function validateCondition<const T extends TypeRecord, const V extends boolean> (condition: Omit<UncheckedCondition, 'validated' | 'value'> & { value: string | string[] }, constraints: ExpressionConstraints<T, V> | undefined, valueIsImplicit?: boolean, ctx?: Context): Exclude<Expression<ConvertTypeRecord<T>, V>, Group<ConvertTypeRecord<T>, V>> {
   let validated = false
+  condition.field = processToken(condition.field).unescaped
   const field = constraints?.caseInsensitive
     ? [...Object.keys(constraints.types ?? {}), ...Object.keys(constraints.restricted ?? {})].find((k) => k.toLowerCase() === condition.field.toLowerCase()) ?? condition.field
     : condition.field
@@ -327,7 +340,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
   const operationType = COMPARISON_TYPE_DICTIONARY[condition.operation]
   const types = type && (Array.isArray(type) ? type : [type])
 
-  const values = Array.isArray(condition.value) ? condition.value : [condition.value]
+  const processedValues = (Array.isArray(condition.value) ? condition.value : [condition.value]).map((v) => processToken(v))
 
   // Check if this field is allowed to be queried
   if (restriction === true) throw new ConstraintError(`Field "${condition.field}" is restricted`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
@@ -337,7 +350,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
     if (philosophy === 'deny') {
       for (const check of checks) {
         if (check instanceof RegExp) {
-          if (values.some((v) => check.test(v.toString()))) {
+          if (processedValues.some(({ unescaped }) => check.test(unescaped))) {
             throw new ConstraintError(
               `Value for field "${condition.field}" violates prohibitive pattern constraint "${check.toString()}". Prohibited values/patterns: Allowed values/patterns: ${checks.join(', ')}`,
               ctx?.startToken,
@@ -347,7 +360,7 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
             )
           }
         } else {
-          if (values.includes(check)) {
+          if (processedValues.some(({ unescaped }) => unescaped === check)) {
             throw new ConstraintError(
               `Forbidden value "${check}" for field "${condition.field}". Prohibited values/patterns: ${checks.join(', ')}`,
               ctx?.startToken,
@@ -359,8 +372,8 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
         }
       }
     } else {
-      for (const value of values) {
-        if (!checks.some((c) => (c instanceof RegExp && c.test(value.toString())) || c === value)) {
+      for (const { unescaped } of processedValues) {
+        if (!checks.some((c) => c instanceof RegExp ? c.test(unescaped) : c === unescaped)) {
           throw new ConstraintError(
             `Value for field "${condition.field}" does not meet any allowed value/pattern. Allowed values/patterns: ${checks.join(', ')}`,
             ctx?.startToken,
@@ -382,8 +395,8 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
 
   // Employ type coercion and see if the type works
   // Mutate
-  for (let i = 0; i < values.length; ++i) {
-    const v = values[i]!
+  for (let i = 0; i < processedValues.length; ++i) {
+    const v = processedValues[i]!
 
     let opTypes: FieldType[]
     if (valueIsImplicit) opTypes = ['boolean']
@@ -404,8 +417,8 @@ function validateCondition<const T extends TypeRecord, const V extends boolean> 
 
     try {
       const value = coerceType(v, types ?? opTypes, opTypes, dateInterpreter)
-      ;(values as Primitive[])[i] = value
-      if (!Array.isArray(condition.value)) (condition.value as Primitive) = value
+      if (Array.isArray(condition.value)) (condition.value[i] as Primitive) = value
+      else (condition.value as Primitive) = value
     } catch (err) {
       switch ((err as Error).message) {
         case 'operator': throw new ConstraintError(`Value "${condition.value.toString()}" not allowed for operation "${condition.operation}" which only allows for "${operationType}" type`, ctx?.startToken, ctx?.startIndex, ctx?.endToken, ctx?.endIndex)
@@ -680,7 +693,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         ++t
 
         field = {
-          content: processToken(nextToken.content).unescaped,
+          content: nextToken.content,
           token,
           index: _offset + t
         }
@@ -700,7 +713,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         })
       } else {
         field = {
-          content: processToken(token.content).unescaped,
+          content: token.content,
           token,
           index: _offset + t
         }
@@ -732,18 +745,8 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
 
         function resolveEntry (subtoken: Token, subindex: number): void {
           if (workingEntry) {
-            const {
-              unquoted: unquotedWorkingEntry
-            } = processToken(workingEntry)
-
             const subquotes = workingEntry.match(QUOTE_REGEX)
             if (subquotes && (subquotes.index !== 0 || subquotes[0].length !== workingEntry.length)) throw new ParseError('Quotes must surround entire values in arrays', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
-            if (
-              !unquotedWorkingEntry && (
-                (token.content === '[' && new RegExp(`${ESCAPE_REGEX}(?:\\[|\\])`).test(workingEntry)) ||
-                (token.content === '{' && new RegExp(`${ESCAPE_REGEX}(?:\\{|\\})`).test(workingEntry))
-              )
-            ) throw new ParseError('Unescaped bracket in an array value', firstEntryToken ?? subtoken, firstEntryTokenIndex ?? subindex, lastEntryToken ?? subtoken, lastEntryTokenIndex ?? subindex)
 
             arr.push(workingEntry)
             workingEntry = ''

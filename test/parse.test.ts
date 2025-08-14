@@ -240,7 +240,9 @@ test('invalid operands', () => {
   expect(() => parse('field in []'), 'no array entries').toThrow(ParseError)
   expect(() => parse('field in []'), 'no array entries').toThrow('Token #2 -> #3 (char 9 -> 10 "[" -> "]"): Empty array provided as value')
   expect(() => parse('[entry] = bar'), 'array as field').toThrow(ParseError)
-  expect(() => parse('foo in {{}, 1}'), 'brackets in array value').toThrow(ParseError)
+  expect(() => parse('foo in {{, 1}'), 'brackets in array value').toThrow(ParseError)
+  expect(() => parse('foo in {}, 1}'), 'brackets in array value').toThrow(ParseError)
+  expect(() => parse('foo in {{}, 1}'), 'brackets in array value').not.toThrow()
   expect(() => parse('foo in [{}, 1]'), 'allowed brackets in array value').not.toThrow()
   expect(() => parse('foo in [\'value\' unseparated, othervalue]'), 'non-surrounding string in array').toThrow(ParseError)
   expect(() => parse('foo = 123 | (foo ~)'), 'dangling in group').toThrow(ParseError)
@@ -486,7 +488,9 @@ test('basic parsing errors', () => {
   expect(() => parse('field = "foo" bar or foo'), 'quote literal in the middle').toThrow(ParseError)
   expect(() => parse('field = "foo" or foo "bar"'), 'quote literal at the end').toThrow(ParseError)
   expect(() => parse('= "foo" or foo "bar"'), 'opening with comparison').toThrow(ParseError)
-  expect(() => parse('field : [[bar]]'), 'unescaped bracket in array').toThrow('Unescaped bracket in an array value')
+  expect(() => parse('field : [[bar]'), 'unescaped bracket in array').toThrow('Missing closing bracket/brace for array value')
+  expect(() => parse('field : [bar]]'), 'unescaped bracket in array').toThrow('Unexpected closing bracket/brace')
+  expect(() => parse('field : [[bar]]'), 'unescaped bracket in array').not.toThrow()
   expect(() => parse('field : ["[bar]", \\[bar\\]]'), 'unescaped bracket in array').not.toThrow()
 })
 
@@ -1026,6 +1030,8 @@ test('restriction constraints', () => {
     value: 'false',
     validated: true
   })
+
+  expect(() => parse('field = "foo"', { restricted: { field: ['allow', [/^foo$/]] } }), 'Test Regex matching on forced strings').not.toThrow()
 })
 
 test('date conversion', () => {
