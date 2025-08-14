@@ -1,7 +1,7 @@
 /// <reference lib='dom' />
 /// <reference lib='dom.iterable' />
 
-import { type Token, type TypeRecord, OPERATION_ALIAS_DICTIONARY, OPERATION_PURPOSE_DICTIONARY } from './spec'
+import { type Token, type TypeRecord, ARRAY_DELIMITERS, BRACKETS, NEGATORS, OPERATION_ALIAS_DICTIONARY, OPERATION_PURPOSE_DICTIONARY, PARENS } from './spec'
 import { type ExpressionConstraints, QUOTE_EDGE_REGEX, parse, tokenize } from './parse'
 import { ConstraintError, ParseError } from './errors'
 
@@ -103,13 +103,13 @@ export function createDOMInput<const T extends TypeRecord, const V extends boole
       element.toggleAttribute('data-node', true)
       if (token.content.match(QUOTE_EDGE_REGEX)) element.toggleAttribute('data-quoted', true)
       if (!isNaN(Number(token.content))) element.toggleAttribute('data-number', true)
-      if (['(', ')', '[', ']', '{', '}'].includes(token.content)) {
-        if ((inArray === '[' && token.content === ']') || (inArray === '{' && token.content === '}')) inArray = undefined
+      if (PARENS.concat(BRACKETS).some((entry) => entry.includes(token.content))) {
+        if (inArray && BRACKETS.some(([o, c]) => (inArray === o && token.content === c))) inArray = undefined
         if (!inArray) element.setAttribute('data-bracket', token.content)
-        if (!inArray && ['[', '{'].includes(token.content)) inArray = token.content
+        if (!inArray && BRACKETS.some(([o]) => o === token.content)) inArray = token.content
       }
-      if (inArray && token.content === ',') element.toggleAttribute('data-delimiter', true)
-      if (!inArray && token.content === '!') element.toggleAttribute('data-negation', true)
+      if (inArray && ARRAY_DELIMITERS.includes(token.content)) element.toggleAttribute('data-delimiter', true)
+      if (!inArray && NEGATORS.includes(token.content)) element.toggleAttribute('data-negation', true)
       if (!inArray && token.content in OPERATION_ALIAS_DICTIONARY) {
         element.setAttribute('data-operation', OPERATION_PURPOSE_DICTIONARY[OPERATION_ALIAS_DICTIONARY[token.content as keyof typeof OPERATION_ALIAS_DICTIONARY]])
       }

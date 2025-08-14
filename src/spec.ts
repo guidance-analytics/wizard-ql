@@ -1,4 +1,15 @@
 /* eslint-disable @stylistic/quote-props */
+export const QUOTES = ['\'', '"', '`']
+export const BRACKETS: Array<[open: string, close: string]> = [
+  ['[', ']'],
+  ['{', '}']
+]
+export const PARENS: Array<[open: string, close: string]> = [
+  ['(', ')']
+]
+export const NEGATORS = ['!']
+export const ARRAY_DELIMITERS = [',']
+
 /** All available operation aliases (alias -> operation) */
 export const OPERATION_ALIAS_DICTIONARY = {
   // NOTE: Longer tokens that encompass others must be first so that they are matched first in the Regex

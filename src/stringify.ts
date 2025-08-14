@@ -1,5 +1,10 @@
 import { TOKEN_REGEX } from './parse'
-import type { Expression, JunctionOperation, Operation, Primitive } from './spec'
+import { type Expression, type JunctionOperation, type Operation, type Primitive, ARRAY_DELIMITERS, BRACKETS, NEGATORS, PARENS } from './spec'
+
+const DEFAULT_BRACKET = BRACKETS[0]!
+const DEFAULT_PAREN = PARENS[0]!
+const DEFAULT_NEGATOR = NEGATORS[0]!
+const DEFAULT_DELIMITER = ARRAY_DELIMITERS[0]!
 
 export interface StringifyOptions {
   /**
@@ -116,9 +121,9 @@ export function stringify (
           if ((!compact || junctionNotation === 'linguistic')) string += ' '
         }
 
-        if ((alwaysParenthesize && constituent.type === 'group') || (expression.operation === 'AND' && constituent.operation === 'OR')) string += '('
+        if ((alwaysParenthesize && constituent.type === 'group') || (expression.operation === 'AND' && constituent.operation === 'OR')) string += DEFAULT_PAREN[0]
         string += stringify(constituent, opts)
-        if ((alwaysParenthesize && constituent.type === 'group') || (expression.operation === 'AND' && constituent.operation === 'OR')) string += ')'
+        if ((alwaysParenthesize && constituent.type === 'group') || (expression.operation === 'AND' && constituent.operation === 'OR')) string += DEFAULT_PAREN[1]
       }
 
       break
@@ -126,16 +131,16 @@ export function stringify (
       if (condenseBooleans && ['EQUAL', 'NOTEQUAL'].includes(expression.operation) && typeof expression.value === 'boolean') {
         const negative = (expression.operation === 'EQUAL' && !expression.value) || (expression.operation === 'NOTEQUAL' && expression.value)
 
-        string += `${negative ? '!' : ''}${expression.field}`
+        string += `${negative ? DEFAULT_NEGATOR : ''}${expression.field}`
       } else {
         string += expression.field
         if (!compact || comparisonNotation === 'linguistic') string += ' '
         string += formats[comparisonNotation][expression.operation]
         if (!compact || comparisonNotation === 'linguistic') string += ' '
         if (Array.isArray(expression.value)) {
-          const join = expression.value.map(addQuotesIfNecessary).join(compact ? ',' : ', ')
+          const join = expression.value.map(addQuotesIfNecessary).join(compact ? DEFAULT_DELIMITER : DEFAULT_DELIMITER + ' ')
 
-          string += `[${join}]`
+          string += `${DEFAULT_BRACKET[0]}${join}${DEFAULT_BRACKET[1]}`
         } else string += addQuotesIfNecessary(expression.value)
       }
 

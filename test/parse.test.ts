@@ -256,6 +256,8 @@ test('parsing errors', () => { // AI-generated tests
   expect(() => parse('field = OR')).toThrow(ParseError)
   expect(() => parse('field = 123 "foo"')).toThrow(ParseError)
   expect(() => parse('field = [1, 2,')).toThrow(ParseError)
+  expect(() => parse('foo, bar')).toThrow(ParseError)
+  expect(() => parse('foo =, bar')).toThrow(ParseError)
 
   // Invalid operations
   expect(() => parse('field <> value')).toThrow(ParseError)

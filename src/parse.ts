@@ -12,10 +12,14 @@ import {
   type Token,
   type TypeRecord,
   type UncheckedCondition,
+  BRACKETS,
+  PARENS,
   COMPARISON_TYPE_DICTIONARY,
   OPERATION_ALIAS_DICTIONARY,
   OPERATION_PURPOSE_DICTIONARY,
-  TYPE_PRIORITY
+  TYPE_PRIORITY,
+  NEGATORS,
+  ARRAY_DELIMITERS
 } from './spec'
 
 import { ConstraintError, ParseError } from './errors'
@@ -65,7 +69,7 @@ function _tokenize (expression: string, pattern: RegExp): Token[] {
   for (const match of matches) {
     pushSanitized(tokens, expression.slice(lastMatchEnd ?? 0, match.index), lastMatchEnd === null ? 0 : lastMatchEnd)
 
-    if (['[', '{'].includes(match[0])) {
+    if (BRACKETS.some(([o]) => match[0] === o)) {
       const startToken = {
         content: match[0],
         index: match.index
@@ -81,8 +85,7 @@ function _tokenize (expression: string, pattern: RegExp): Token[] {
         ) ++subopenings
 
         if (
-          (match[0] === '[' && submatch[0] === ']') ||
-          (match[0] === '{' && submatch[0] === '}')
+          BRACKETS.some(([o, c]) => match[0] === o && submatch[0] === c)
         ) {
           if (subopenings) --subopenings
           else {
@@ -532,13 +535,14 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
   for (let t = 0; t < tokens.length; ++t) {
     const token = tokens[t]!
 
-    if (token.content === ')') throw new ParseError('Unexpected closing parenthesis', token, _offset + t)
-    if ([']', '}'].includes(token.content)) throw new ParseError('Unexpected closing bracket/brace', token, _offset + t)
+    if (PARENS.some(([, c]) => token.content === c)) throw new ParseError('Unexpected closing parenthesis', token, _offset + t)
+    if (BRACKETS.some(([, c]) => token.content === c)) throw new ParseError('Unexpected closing bracket/brace', token, _offset + t)
 
-    if (token.content === '(') {
+    const paren = PARENS.find(([o]) => token.content === o)
+    if (paren) {
       if (field || comparisonOperation || value) throw new ParseError('Tried to open a group during an operation', token, _offset + t)
 
-      const closingIndex = getClosingIndex(tokens, t, '(', ')')
+      const closingIndex = getClosingIndex(tokens, t, paren[0], paren[1])
       if (closingIndex === -1) throw new ParseError('Missing closing parenthesis for group', token, _offset + t)
       ++t
 
@@ -622,10 +626,11 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
       continue
     }
 
-    if (token.content === '!') {
+    if (NEGATORS.includes(token.content)) {
       const nextToken = tokens[t + 1]
 
-      if (nextToken?.content === '(') {
+      const nextParen = PARENS.find(([o]) => nextToken?.content === o)
+      if (nextParen) {
         resolveCondition({
           startToken: (field?.token ?? token),
           startIndex: field?.index ?? _offset + t,
@@ -635,7 +640,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
 
         ++t
 
-        const closingIndex = getClosingIndex(tokens, t, '(', ')')
+        const closingIndex = getClosingIndex(tokens, t, nextParen[0], nextParen[1])
         if (closingIndex === -1) throw new ParseError('Missing closing parenthesis for group', token, _offset + t)
 
         ++t
@@ -679,7 +684,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
     }
 
     if (!field) {
-      if (token.content === '!') {
+      if (NEGATORS.includes(token.content)) {
         const nextToken = tokens[t + 1]
         if (!nextToken) throw new ParseError('Unexpected "!"', token, _offset + t)
 
@@ -723,8 +728,9 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
     }
 
     if (!value) {
-      if (['[', '{'].includes(token.content)) {
-        const closingIndex = getClosingIndex(tokens, t, token.content, token.content === '[' ? ']' : '}')
+      const bracket = BRACKETS.find(([o]) => token.content === o)
+      if (bracket) {
+        const closingIndex = getClosingIndex(tokens, t, bracket[0], bracket[1])
         if (closingIndex === -1) throw new ParseError('Missing closing bracket/brace for array value', token, _offset + t)
 
         ++t
@@ -760,7 +766,7 @@ function _parse<const T extends TypeRecord, const V extends boolean> (tokens: To
         for (let ct = 0; ct < arrayContents.length; ++ct) {
           const contentToken = arrayContents[ct]!
 
-          if (contentToken.content === ',') {
+          if (ARRAY_DELIMITERS.includes(contentToken.content)) {
             if (!workingEntry) throw new ParseError('Unexpected blank entry in array', contentToken, _offset + t + ct)
 
             resolveEntry(contentToken, _offset + t + ct)
