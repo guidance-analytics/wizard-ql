@@ -50,10 +50,13 @@ export class ParseError extends Error {
   readonly startIndex: number | undefined
   /** The end token index */
   readonly endIndex: number | undefined
+  /** The tokens being parsed */
+  readonly tokens: Token[] | undefined
 
   /**
    * Construct a Parsing Error
    * @param message    The error message
+   * @param tokens     The tokens being parsed
    * @param startToken The first token this error pertains to
    * @param startIndex The start token index
    * @param endToken   The last token this error pertains to
@@ -61,6 +64,7 @@ export class ParseError extends Error {
    */
   constructor (
     message: string,
+    tokens: Token[] | undefined,
     startToken: Token | undefined,
     startIndex: number | undefined,
     endToken: Token | undefined = startToken,
@@ -69,6 +73,7 @@ export class ParseError extends Error {
     const header = constructHeader(startToken, startIndex, endToken, endIndex)
 
     super(header + message)
+    this.tokens = tokens
     this.rawMessage = message
     this.startToken = startToken
     this.endToken = endToken
@@ -92,10 +97,13 @@ export class ConstraintError extends Error {
   readonly startIndex: number | undefined
   /** The end token index */
   readonly endIndex: number | undefined
+  /** The tokens being parsed */
+  readonly tokens: Token[] | undefined
 
   /**
    * Construct a Constraint Error
    * @param message    The error message
+   * @param tokens     The tokens being parsed
    * @param startToken The first token this error pertains to
    * @param startIndex The start token index
    * @param endToken   The last token this error pertains to
@@ -103,6 +111,7 @@ export class ConstraintError extends Error {
    */
   constructor (
     message: string,
+    tokens: Token[] | undefined,
     startToken: Token | undefined,
     startIndex: number | undefined,
     endToken: Token | undefined = startToken,
@@ -111,6 +120,7 @@ export class ConstraintError extends Error {
     const header = constructHeader(startToken, startIndex, endToken, endIndex)
 
     super(header + message)
+    this.tokens = tokens
     this.rawMessage = message
     this.startToken = startToken
     this.endToken = endToken
